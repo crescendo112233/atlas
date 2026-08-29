@@ -23,14 +23,17 @@ test("server-renders the restrained globe workspace", async () => {
   assert.doesNotMatch(html, /悄悄话|粉色泡泡/);
 });
 
-test("ships the satellite, boundary, and photo-storage configuration", async () => {
-  const [component, hosting, boundaries] = await Promise.all([
+test("ships the cartographic globe, boundary, and photo-storage configuration", async () => {
+  const [component, hosting, boundaries, countries] = await Promise.all([
     readFile(new URL("../app/GlobeDiary.tsx", import.meta.url), "utf8"),
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../public/visited-boundaries.json", import.meta.url), "utf8"),
+    readFile(new URL("../public/world-countries.geojson", import.meta.url), "utf8"),
   ]);
-  assert.match(component, /earth-blue-marble\.png/);
+  assert.doesNotMatch(component, /earth-blue-marble/);
+  assert.match(component, /world-countries\.geojson/);
   assert.match(component, /最多五张/);
   assert.equal(JSON.parse(hosting).r2, "MEDIA");
   assert.equal(JSON.parse(boundaries).features.length, 7);
+  assert.ok(JSON.parse(countries).features.length > 150);
 });

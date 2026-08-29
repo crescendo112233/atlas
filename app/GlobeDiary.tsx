@@ -13,7 +13,7 @@ type Footprint = {
   visitedAt: string; createdAt: string; photos: Photo[];
 };
 type BoundaryFeature = {
-  properties: { key: string; name: string };
+  properties: Record<string, unknown> & { key?: string; name?: string };
   geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
 };
 
@@ -40,6 +40,19 @@ function globePoint(latitude: number, longitude: number, radius = 1) {
 function boundaryRings(feature: BoundaryFeature): number[][][] {
   if (feature.geometry.type === "Polygon") return feature.geometry.coordinates as number[][][];
   return (feature.geometry.coordinates as number[][][][]).flat();
+}
+
+function mapLine(ring: number[][], radius: number, material: LineMaterial) {
+  const positions = ring.flatMap(([longitude, latitude]) => {
+    const point = globePoint(latitude, longitude, radius);
+    return [point.x, point.y, point.z];
+  });
+  if (positions.length < 9) return null;
+  const geometry = new LineGeometry();
+  geometry.setPositions(positions);
+  const line = new Line2(geometry, material);
+  line.computeLineDistances();
+  return line;
 }
 
 function GlobeCanvas({ footprints, selectedId, onSelect }: {
@@ -70,54 +83,37 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const globe = new THREE.Group();
     globe.rotation.y = Math.PI;
     scene.add(globe);
-    const textureLoader = new THREE.TextureLoader();
-    const texture = textureLoader.load("/earth-blue-marble.png");
-    texture.colorSpace = THREE.SRGBColorSpace;
-    texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
-    const earthMaterial = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.92, metalness: 0 });
+    const earthMaterial = new THREE.MeshStandardMaterial({
+      color: 0x123542,
+      emissive: 0x06171f,
+      emissiveIntensity: 0.62,
+      roughness: 0.88,
+      metalness: 0.08,
+    });
     globe.add(new THREE.Mesh(
-      new THREE.SphereGeometry(1, 96, 64),
+      new THREE.SphereGeometry(1, 128, 96),
       earthMaterial,
     ));
-    let highResolutionTexture: THREE.Texture | null = null;
     let disposed = false;
-    if (renderer.capabilities.maxTextureSize >= 8192) {
-      textureLoader.load("/earth-blue-marble-8192.jpg", (loaded) => {
-        if (disposed) return loaded.dispose();
-        loaded.colorSpace = THREE.SRGBColorSpace;
-        loaded.anisotropy = renderer.capabilities.getMaxAnisotropy();
-        highResolutionTexture = loaded;
-        earthMaterial.map = loaded;
-        earthMaterial.needsUpdate = true;
-        texture.dispose();
-      });
-    }
-    scene.add(new THREE.HemisphereLight(0xc8d4df, 0x07101a, 2.15));
-    const sunlight = new THREE.DirectionalLight(0xffffff, 2.6);
+    scene.add(new THREE.HemisphereLight(0xb8e5df, 0x061117, 2.4));
+    const sunlight = new THREE.DirectionalLight(0xe7fff8, 2.2);
     sunlight.position.set(-3, 3, 4);
     scene.add(sunlight);
     globe.add(new THREE.Mesh(
-      new THREE.SphereGeometry(1.018, 64, 48),
-      new THREE.MeshBasicMaterial({ color: 0x7fc9c1, transparent: true, opacity: 0.085, side: THREE.BackSide }),
+      new THREE.SphereGeometry(1.025, 96, 72),
+      new THREE.MeshBasicMaterial({ color: 0x75cbbb, transparent: true, opacity: 0.075, side: THREE.BackSide }),
     ));
 
-    const markerNormal = new THREE.Vector3(0, 0, 1);
     const markers = footprints.map((footprint) => {
       const marker = new THREE.Group();
       const surfaceNormal = globePoint(footprint.latitude, footprint.longitude).normalize();
-      marker.position.copy(surfaceNormal.clone().multiplyScalar(1.022));
-      marker.quaternion.setFromUnitVectors(markerNormal, surfaceNormal);
+      marker.position.copy(surfaceNormal.clone().multiplyScalar(1.025));
       marker.userData.footprintId = footprint.id;
-      const ring = new THREE.Mesh(
-        new THREE.TorusGeometry(0.014, 0.0021, 8, 28),
-        new THREE.MeshBasicMaterial({ color: 0x7dc9ba, transparent: true, side: THREE.DoubleSide }),
-      );
-      ring.userData.markerRing = true;
       const hitArea = new THREE.Mesh(
-        new THREE.SphereGeometry(0.024, 10, 10),
+        new THREE.SphereGeometry(0.035, 10, 10),
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
       );
-      marker.add(ring, hitArea);
+      marker.add(hitArea);
       globe.add(marker);
       return marker;
     });
@@ -131,7 +127,11 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     controls.zoomToCursor = true;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.26;
-    controls.addEventListener("start", () => { controls.autoRotate = false; });
+    let focusDirection: THREE.Vector3 | null = null;
+    let focusDistance = camera.position.length();
+    let lastFocusedId: number | null | undefined;
+    const stopFocus = () => { controls.autoRotate = false; focusDirection = null; };
+    controls.addEventListener("start", stopFocus);
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
@@ -146,6 +146,15 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     };
     renderer.domElement.addEventListener("pointerup", pick);
 
+    const lineMaterials: LineMaterial[] = [];
+    const countryMaterial = new LineMaterial({
+      color: 0x7eb7b2,
+      transparent: true,
+      opacity: 0.36,
+      depthWrite: false,
+      linewidth: 0.78,
+    });
+    lineMaterials.push(countryMaterial);
     const boundaryVisuals: Array<{ city: string; core: LineMaterial; glow: LineMaterial }> = [];
     let frame = 0;
     const resize = () => {
@@ -153,82 +162,104 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       camera.aspect = clientWidth / Math.max(clientHeight, 1);
       camera.updateProjectionMatrix();
       renderer.setSize(clientWidth, clientHeight, false);
-      for (const visual of boundaryVisuals) {
-        visual.core.resolution.set(clientWidth, clientHeight);
-        visual.glow.resolution.set(clientWidth, clientHeight);
-      }
+      for (const material of lineMaterials) material.resolution.set(clientWidth, clientHeight);
     };
     const observer = new ResizeObserver(resize);
     observer.observe(mount);
     resize();
 
+    const graticuleMaterial = new THREE.LineBasicMaterial({
+      color: 0x5e8d93,
+      transparent: true,
+      opacity: 0.2,
+      depthWrite: false,
+    });
+    for (let latitude = -60; latitude <= 60; latitude += 30) {
+      const points = [];
+      for (let longitude = -180; longitude <= 180; longitude += 3) points.push(globePoint(latitude, longitude, 1.003));
+      globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), graticuleMaterial));
+    }
+    for (let longitude = -180; longitude < 180; longitude += 30) {
+      const points = [];
+      for (let latitude = -87; latitude <= 87; latitude += 3) points.push(globePoint(latitude, longitude, 1.003));
+      globe.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), graticuleMaterial));
+    }
+
+    fetch("/world-countries.geojson")
+      .then((response) => response.json())
+      .then((collection: { features: BoundaryFeature[] }) => {
+        if (disposed) return;
+        for (const feature of collection.features) {
+          for (const ring of boundaryRings(feature)) {
+            const line = mapLine(ring, 1.006, countryMaterial);
+            if (line) globe.add(line);
+          }
+        }
+      })
+      .catch(console.error);
+
     fetch("/visited-boundaries.json")
       .then((response) => response.json())
       .then((collection: { features: BoundaryFeature[] }) => {
+        if (disposed) return;
         for (const feature of collection.features) {
           const coreMaterial = new LineMaterial({
-            color: 0x78c7b9,
+            color: 0x79d4c4,
             transparent: true,
-            opacity: 0.28,
+            opacity: 0.58,
             depthWrite: false,
-            linewidth: 1.1,
+            linewidth: 1.65,
           });
           const glowMaterial = new LineMaterial({
-            color: 0x62e2cd,
+            color: 0xf4ca6f,
             transparent: true,
-            opacity: 0.025,
+            opacity: 0.015,
             depthWrite: false,
-            linewidth: 4,
+            linewidth: 5,
             blending: THREE.AdditiveBlending,
           });
           coreMaterial.resolution.set(mount.clientWidth, mount.clientHeight);
           glowMaterial.resolution.set(mount.clientWidth, mount.clientHeight);
-          boundaryVisuals.push({ city: feature.properties.name, core: coreMaterial, glow: glowMaterial });
+          lineMaterials.push(coreMaterial, glowMaterial);
+          boundaryVisuals.push({ city: String(feature.properties.name ?? ""), core: coreMaterial, glow: glowMaterial });
           for (const ring of boundaryRings(feature)) {
-            const points = ring.map(([longitude, latitude]) => globePoint(latitude, longitude, 1.016));
-            if (points.length < 3) continue;
-            const positions = points.flatMap((point) => [point.x, point.y, point.z]);
-            const glowGeometry = new LineGeometry();
-            glowGeometry.setPositions(positions);
-            const glowLine = new Line2(glowGeometry, glowMaterial);
-            glowLine.computeLineDistances();
-            globe.add(glowLine);
-            const coreGeometry = new LineGeometry();
-            coreGeometry.setPositions(positions);
-            const coreLine = new Line2(coreGeometry, coreMaterial);
-            coreLine.computeLineDistances();
-            globe.add(coreLine);
+            const glowLine = mapLine(ring, 1.017, glowMaterial);
+            const coreLine = mapLine(ring, 1.019, coreMaterial);
+            if (glowLine) globe.add(glowLine);
+            if (coreLine) globe.add(coreLine);
           }
         }
       })
       .catch(console.error);
 
     const animationStartedAt = performance.now();
-    const markerWorldPosition = new THREE.Vector3();
+    const cameraDirection = new THREE.Vector3();
     const animate = () => {
       frame = requestAnimationFrame(animate);
+      if (selectedIdRef.current !== lastFocusedId) {
+        lastFocusedId = selectedIdRef.current;
+        const footprint = footprints.find((item) => item.id === selectedIdRef.current);
+        if (footprint) {
+          focusDirection = globePoint(footprint.latitude, footprint.longitude).applyQuaternion(globe.quaternion).normalize();
+          focusDistance = camera.position.length();
+          controls.autoRotate = false;
+        }
+      }
+      if (focusDirection) {
+        cameraDirection.copy(camera.position).normalize().lerp(focusDirection, 0.085).normalize();
+        camera.position.copy(cameraDirection.multiplyScalar(focusDistance));
+        if (camera.position.clone().normalize().angleTo(focusDirection) < 0.002) focusDirection = null;
+      }
       controls.update();
       const time = (performance.now() - animationStartedAt) / 1000;
-      for (const marker of markers) {
-        const active = marker.userData.footprintId === selectedIdRef.current;
-        marker.getWorldPosition(markerWorldPosition);
-        const cameraDistance = camera.position.distanceTo(markerWorldPosition);
-        const constantScreenScale = THREE.MathUtils.clamp(cameraDistance * 0.26, 0.022, 1);
-        const pulse = active ? 1.12 + Math.sin(time * 2.4) * 0.05 : 1;
-        marker.scale.setScalar(constantScreenScale * pulse);
-        const ring = marker.children.find((child) => child.userData.markerRing) as THREE.Mesh;
-        const material = ring.material as THREE.MeshBasicMaterial;
-        material.color.set(active ? 0xf3c978 : 0x7dc9ba);
-        material.opacity = active ? 1 : 0.64;
-      }
       for (const visual of boundaryVisuals) {
         const active = visual.city === selectedCityRef.current;
-        visual.core.color.set(active ? 0xf4c96f : 0x78c7b9);
-        visual.core.opacity = active ? 1 : 0.24;
-        visual.core.linewidth = active ? 2.7 : 1.05;
-        visual.glow.color.set(active ? 0x79ead5 : 0x4e9f9a);
-        visual.glow.opacity = active ? 0.24 + Math.sin(time * 2.2) * 0.06 : 0.018;
-        visual.glow.linewidth = active ? 7 : 3.2;
+        visual.core.color.set(active ? 0xf6cf76 : 0x79d4c4);
+        visual.core.opacity = active ? 1 : 0.52;
+        visual.core.linewidth = active ? 4.4 : 1.55;
+        visual.glow.color.set(active ? 0xf6cf76 : 0x55b9ae);
+        visual.glow.opacity = active ? 0.13 + Math.sin(time * 2.2) * 0.025 : 0.012;
+        visual.glow.linewidth = active ? 9 : 4;
       }
       renderer.render(scene, camera);
     };
@@ -239,8 +270,8 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       cancelAnimationFrame(frame);
       observer.disconnect();
       renderer.domElement.removeEventListener("pointerup", pick);
+      controls.removeEventListener("start", stopFocus);
       controls.dispose();
-      (highResolutionTexture ?? texture).dispose();
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
           object.geometry.dispose();
@@ -322,7 +353,7 @@ export function GlobeDiary() {
     <main className="site-shell">
       <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
       <section className="workspace">
-        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">空心环定位城市 · 金色实线显示边界 · 滚轮或双指放大</p></div>
+        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">右侧选择城市 · 金色粗线显示行政边界 · 拖动旋转，滚轮放大</p></div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
@@ -339,7 +370,7 @@ export function GlobeDiary() {
           </div>}
         </aside>
       </section>
-      <footer>地球影像：NASA/GSFC · 边界数据：© OpenStreetMap contributors</footer>
+      <footer>世界地图：Natural Earth · 城市边界：© OpenStreetMap contributors</footer>
       {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setFormOpen(false); }}>
         <form className="location-form" onSubmit={submit}>
           <div className="form-heading"><div><p className="eyebrow">NEW PLACE</p><h2>添加地点 / 照片</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="关闭">×</button></div>
