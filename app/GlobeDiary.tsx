@@ -60,7 +60,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     if (!mount) return;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(38, 1, 0.1, 100);
+    const camera = new THREE.PerspectiveCamera(38, 1, 0.025, 100);
     camera.position.set(0, 0.08, 3.9);
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
@@ -70,13 +70,28 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const globe = new THREE.Group();
     globe.rotation.y = Math.PI;
     scene.add(globe);
-    const texture = new THREE.TextureLoader().load("/earth-blue-marble.png");
+    const textureLoader = new THREE.TextureLoader();
+    const texture = textureLoader.load("/earth-blue-marble.png");
     texture.colorSpace = THREE.SRGBColorSpace;
     texture.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    const earthMaterial = new THREE.MeshStandardMaterial({ map: texture, roughness: 0.92, metalness: 0 });
     globe.add(new THREE.Mesh(
       new THREE.SphereGeometry(1, 96, 64),
-      new THREE.MeshStandardMaterial({ map: texture, roughness: 0.95, metalness: 0 }),
+      earthMaterial,
     ));
+    let highResolutionTexture: THREE.Texture | null = null;
+    let disposed = false;
+    if (renderer.capabilities.maxTextureSize >= 8192) {
+      textureLoader.load("/earth-blue-marble-8192.jpg", (loaded) => {
+        if (disposed) return loaded.dispose();
+        loaded.colorSpace = THREE.SRGBColorSpace;
+        loaded.anisotropy = renderer.capabilities.getMaxAnisotropy();
+        highResolutionTexture = loaded;
+        earthMaterial.map = loaded;
+        earthMaterial.needsUpdate = true;
+        texture.dispose();
+      });
+    }
     scene.add(new THREE.HemisphereLight(0xc8d4df, 0x07101a, 2.15));
     const sunlight = new THREE.DirectionalLight(0xffffff, 2.6);
     sunlight.position.set(-3, 3, 4);
@@ -100,8 +115,10 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.enablePan = false;
-    controls.minDistance = 2.45;
+    controls.minDistance = 1.12;
     controls.maxDistance = 5.2;
+    controls.zoomSpeed = 0.9;
+    controls.zoomToCursor = true;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.26;
     controls.addEventListener("start", () => { controls.autoRotate = false; });
@@ -202,11 +219,12 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     animate();
 
     return () => {
+      disposed = true;
       cancelAnimationFrame(frame);
       observer.disconnect();
       renderer.domElement.removeEventListener("pointerup", pick);
       controls.dispose();
-      texture.dispose();
+      (highResolutionTexture ?? texture).dispose();
       scene.traverse((object) => {
         if (object instanceof THREE.Mesh || object instanceof THREE.Line) {
           object.geometry.dispose();
@@ -288,7 +306,7 @@ export function GlobeDiary() {
     <main className="site-shell">
       <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
       <section className="workspace">
-        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">拖动旋转 · 滚轮缩放 · 点击金色标记查看</p></div>
+        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">高清影像 · 拖动旋转 · 滚轮或双指继续放大</p></div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
