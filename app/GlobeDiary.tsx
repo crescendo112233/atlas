@@ -175,11 +175,11 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       })
       .catch(console.error);
 
-    const clock = new THREE.Clock();
+    const animationStartedAt = performance.now();
     const animate = () => {
       frame = requestAnimationFrame(animate);
       controls.update();
-      const time = clock.getElapsedTime();
+      const time = (performance.now() - animationStartedAt) / 1000;
       for (const marker of markers) {
         const active = marker.userData.footprintId === selectedIdRef.current;
         const pulse = active ? 1.45 + Math.sin(time * 2.4) * 0.12 : 1;
