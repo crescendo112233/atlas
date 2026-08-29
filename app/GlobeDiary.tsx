@@ -101,13 +101,23 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       new THREE.MeshBasicMaterial({ color: 0x7fc9c1, transparent: true, opacity: 0.085, side: THREE.BackSide }),
     ));
 
+    const markerNormal = new THREE.Vector3(0, 0, 1);
     const markers = footprints.map((footprint) => {
-      const marker = new THREE.Mesh(
-        new THREE.SphereGeometry(0.018, 16, 16),
-        new THREE.MeshBasicMaterial({ color: 0x7dc9ba, transparent: true }),
-      );
-      marker.position.copy(globePoint(footprint.latitude, footprint.longitude, 1.018));
+      const marker = new THREE.Group();
+      const surfaceNormal = globePoint(footprint.latitude, footprint.longitude).normalize();
+      marker.position.copy(surfaceNormal.clone().multiplyScalar(1.022));
+      marker.quaternion.setFromUnitVectors(markerNormal, surfaceNormal);
       marker.userData.footprintId = footprint.id;
+      const ring = new THREE.Mesh(
+        new THREE.TorusGeometry(0.014, 0.0021, 8, 28),
+        new THREE.MeshBasicMaterial({ color: 0x7dc9ba, transparent: true, side: THREE.DoubleSide }),
+      );
+      ring.userData.markerRing = true;
+      const hitArea = new THREE.Mesh(
+        new THREE.SphereGeometry(0.024, 10, 10),
+        new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
+      );
+      marker.add(ring, hitArea);
       globe.add(marker);
       return marker;
     });
@@ -130,8 +140,9 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObjects(markers, false)[0];
-      if (hit) onSelectRef.current(hit.object.userData.footprintId as number);
+      const hit = raycaster.intersectObjects(markers, true)[0];
+      const footprintId = hit?.object.parent?.userData.footprintId;
+      if (footprintId) onSelectRef.current(footprintId as number);
     };
     renderer.domElement.addEventListener("pointerup", pick);
 
@@ -193,17 +204,22 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       .catch(console.error);
 
     const animationStartedAt = performance.now();
+    const markerWorldPosition = new THREE.Vector3();
     const animate = () => {
       frame = requestAnimationFrame(animate);
       controls.update();
       const time = (performance.now() - animationStartedAt) / 1000;
       for (const marker of markers) {
         const active = marker.userData.footprintId === selectedIdRef.current;
-        const pulse = active ? 1.45 + Math.sin(time * 2.4) * 0.12 : 1;
-        marker.scale.setScalar(pulse);
-        const material = marker.material as THREE.MeshBasicMaterial;
+        marker.getWorldPosition(markerWorldPosition);
+        const cameraDistance = camera.position.distanceTo(markerWorldPosition);
+        const constantScreenScale = THREE.MathUtils.clamp(cameraDistance * 0.26, 0.022, 1);
+        const pulse = active ? 1.12 + Math.sin(time * 2.4) * 0.05 : 1;
+        marker.scale.setScalar(constantScreenScale * pulse);
+        const ring = marker.children.find((child) => child.userData.markerRing) as THREE.Mesh;
+        const material = ring.material as THREE.MeshBasicMaterial;
         material.color.set(active ? 0xf3c978 : 0x7dc9ba);
-        material.opacity = active ? 1 : 0.78;
+        material.opacity = active ? 1 : 0.64;
       }
       for (const visual of boundaryVisuals) {
         const active = visual.city === selectedCityRef.current;
@@ -306,7 +322,7 @@ export function GlobeDiary() {
     <main className="site-shell">
       <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
       <section className="workspace">
-        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">高清影像 · 拖动旋转 · 滚轮或双指继续放大</p></div>
+        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">空心环定位城市 · 金色实线显示边界 · 滚轮或双指放大</p></div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
