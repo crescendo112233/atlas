@@ -1,5 +1,6 @@
 import {
   createFootprint,
+  countFootprintPhotos,
   deleteFootprint,
   ensureFootprintsTable,
   listFootprints,
@@ -52,12 +53,18 @@ export async function POST(request: Request) {
     }
 
     await ensureFootprintsTable();
-    const footprint = await createFootprint({ city, country, latitude, longitude, visitedAt });
+    const result = await createFootprint({ city, country, latitude, longitude, visitedAt });
+    const footprint = result.footprint;
     if (!footprint) throw new Error("地点保存失败");
+    const existingPhotoCount = await countFootprintPhotos(footprint.id);
+    if (existingPhotoCount + files.length > 5) {
+      if (result.created) await deleteFootprint(footprint.id);
+      return Response.json({ error: `这个地点还能上传 ${5 - existingPhotoCount} 张照片` }, { status: 400 });
+    }
     try {
       await storeFootprintPhotos(footprint.id, files);
     } catch (error) {
-      await deleteFootprint(footprint.id);
+      if (result.created) await deleteFootprint(footprint.id);
       throw error;
     }
     return Response.json({ footprint: { ...footprint, photos: [] } }, { status: 201 });

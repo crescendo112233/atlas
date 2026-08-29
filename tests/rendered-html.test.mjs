@@ -19,7 +19,7 @@ test("server-renders the restrained globe workspace", async () => {
   const html = await response.text();
   assert.match(html, /<title>我们的地球<\/title>/);
   assert.match(html, /PRIVATE ATLAS/);
-  assert.match(html, /添加地点/);
+  assert.match(html, /添加地点 \/ 照片/);
   assert.doesNotMatch(html, /悄悄话|粉色泡泡/);
 });
 

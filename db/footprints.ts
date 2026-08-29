@@ -95,18 +95,34 @@ export async function listFootprints(): Promise<FootprintRow[]> {
 export async function createFootprint(input: {
   city: string; country: string; latitude: number; longitude: number; visitedAt: string;
 }) {
-  return getD1().prepare(`INSERT INTO footprints
+  const db = getD1();
+  const existing = await db.prepare(`SELECT id, city, country, latitude, longitude,
+    visited_at AS visitedAt, created_at AS createdAt
+    FROM footprints WHERE city = ? AND country = ? ORDER BY id LIMIT 1
+  `).bind(input.city, input.country).first<Omit<FootprintRow, "photos">>();
+  if (existing) {
+    if (input.visitedAt && input.visitedAt !== existing.visitedAt) {
+      await db.prepare("UPDATE footprints SET visited_at = ? WHERE id = ?").bind(input.visitedAt, existing.id).run();
+      existing.visitedAt = input.visitedAt;
+    }
+    return { footprint: existing, created: false };
+  }
+  const footprint = await db.prepare(`INSERT INTO footprints
     (city, country, latitude, longitude, visited_at, memory)
     VALUES (?, ?, ?, ?, ?, '')
     RETURNING id, city, country, latitude, longitude,
     visited_at AS visitedAt, created_at AS createdAt
   `).bind(input.city, input.country, input.latitude, input.longitude, input.visitedAt).first<Omit<FootprintRow, "photos">>();
+  return { footprint, created: true };
 }
 
 export async function storeFootprintPhotos(footprintId: number, files: File[]) {
   if (!files.length) return;
   const db = getD1();
   const media = getMedia();
+  const existing = await db.prepare("SELECT COUNT(*) AS count FROM footprint_photos WHERE footprint_id = ?")
+    .bind(footprintId).first<{ count: number }>();
+  const startIndex = existing?.count ?? 0;
   const uploaded: string[] = [];
   try {
     for (const [index, file] of files.entries()) {
@@ -116,13 +132,21 @@ export async function storeFootprintPhotos(footprintId: number, files: File[]) {
       uploaded.push(objectKey);
       await db.prepare(`INSERT INTO footprint_photos
         (footprint_id, object_key, content_type, sort_order) VALUES (?, ?, ?, ?)
-      `).bind(footprintId, objectKey, file.type, index).run();
+      `).bind(footprintId, objectKey, file.type, startIndex + index).run();
     }
   } catch (error) {
     if (uploaded.length) await media.delete(uploaded);
-    await db.prepare("DELETE FROM footprint_photos WHERE footprint_id = ?").bind(footprintId).run();
+    for (const objectKey of uploaded) {
+      await db.prepare("DELETE FROM footprint_photos WHERE object_key = ?").bind(objectKey).run();
+    }
     throw error;
   }
+}
+
+export async function countFootprintPhotos(footprintId: number) {
+  const result = await getD1().prepare("SELECT COUNT(*) AS count FROM footprint_photos WHERE footprint_id = ?")
+    .bind(footprintId).first<{ count: number }>();
+  return result?.count ?? 0;
 }
 
 export async function getPhoto(id: number) {

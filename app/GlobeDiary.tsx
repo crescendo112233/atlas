@@ -236,7 +236,7 @@ export function GlobeDiary() {
 
   return (
     <main className="site-shell">
-      <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点</button></header>
+      <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
       <section className="workspace">
         <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">拖动旋转 · 滚轮缩放 · 点击金色标记查看</p></div>
         <aside className="places-panel">
@@ -252,7 +252,7 @@ export function GlobeDiary() {
       <footer>地球影像：NASA/GSFC · 边界数据：© OpenStreetMap contributors</footer>
       {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setFormOpen(false); }}>
         <form className="location-form" onSubmit={submit}>
-          <div className="form-heading"><div><p className="eyebrow">NEW PLACE</p><h2>添加地点</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="关闭">×</button></div>
+          <div className="form-heading"><div><p className="eyebrow">NEW PLACE</p><h2>添加地点 / 照片</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="关闭">×</button></div>
           <label>地点<select value={presetKey} onChange={(event) => setPresetKey(event.target.value)}>{PRESETS.map((item) => <option value={item.key} key={item.key}>{item.city} · {item.country}</option>)}<option value="custom">自定义地点</option></select></label>
           {presetKey === "custom" && <div className="custom-grid">
             <label>城市<input value={customPlace.city} required onChange={(event) => setCustomPlace({ ...customPlace, city: event.target.value })} /></label>
