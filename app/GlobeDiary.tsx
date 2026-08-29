@@ -3,6 +3,9 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
+import { Line2 } from "three/examples/jsm/lines/Line2.js";
+import { LineGeometry } from "three/examples/jsm/lines/LineGeometry.js";
+import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 
 type Photo = { id: number; url: string; contentType: string; sortOrder: number };
 type Footprint = {
@@ -45,8 +48,12 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
   const mountRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
   const selectedIdRef = useRef(selectedId);
+  const selectedCityRef = useRef(footprints.find((item) => item.id === selectedId)?.city ?? footprints[0]?.city ?? "");
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
-  useEffect(() => { selectedIdRef.current = selectedId; }, [selectedId]);
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+    selectedCityRef.current = footprints.find((item) => item.id === selectedId)?.city ?? footprints[0]?.city ?? "";
+  }, [selectedId, footprints]);
 
   useEffect(() => {
     const mount = mountRef.current;
@@ -76,13 +83,13 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     scene.add(sunlight);
     globe.add(new THREE.Mesh(
       new THREE.SphereGeometry(1.018, 64, 48),
-      new THREE.MeshBasicMaterial({ color: 0x8fb4ca, transparent: true, opacity: 0.07, side: THREE.BackSide }),
+      new THREE.MeshBasicMaterial({ color: 0x7fc9c1, transparent: true, opacity: 0.085, side: THREE.BackSide }),
     ));
 
     const markers = footprints.map((footprint) => {
       const marker = new THREE.Mesh(
         new THREE.SphereGeometry(0.018, 16, 16),
-        new THREE.MeshBasicMaterial({ color: 0xe7bf70 }),
+        new THREE.MeshBasicMaterial({ color: 0x7dc9ba, transparent: true }),
       );
       marker.position.copy(globePoint(footprint.latitude, footprint.longitude, 1.018));
       marker.userData.footprintId = footprint.id;
@@ -111,12 +118,17 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     };
     renderer.domElement.addEventListener("pointerup", pick);
 
+    const boundaryVisuals: Array<{ city: string; core: LineMaterial; glow: LineMaterial }> = [];
     let frame = 0;
     const resize = () => {
       const { clientWidth, clientHeight } = mount;
       camera.aspect = clientWidth / Math.max(clientHeight, 1);
       camera.updateProjectionMatrix();
       renderer.setSize(clientWidth, clientHeight, false);
+      for (const visual of boundaryVisuals) {
+        visual.core.resolution.set(clientWidth, clientHeight);
+        visual.glow.resolution.set(clientWidth, clientHeight);
+      }
     };
     const observer = new ResizeObserver(resize);
     observer.observe(mount);
@@ -126,26 +138,64 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       .then((response) => response.json())
       .then((collection: { features: BoundaryFeature[] }) => {
         for (const feature of collection.features) {
+          const coreMaterial = new LineMaterial({
+            color: 0x78c7b9,
+            transparent: true,
+            opacity: 0.28,
+            depthWrite: false,
+            linewidth: 1.1,
+          });
+          const glowMaterial = new LineMaterial({
+            color: 0x62e2cd,
+            transparent: true,
+            opacity: 0.025,
+            depthWrite: false,
+            linewidth: 4,
+            blending: THREE.AdditiveBlending,
+          });
+          coreMaterial.resolution.set(mount.clientWidth, mount.clientHeight);
+          glowMaterial.resolution.set(mount.clientWidth, mount.clientHeight);
+          boundaryVisuals.push({ city: feature.properties.name, core: coreMaterial, glow: glowMaterial });
           for (const ring of boundaryRings(feature)) {
-            const points = ring.map(([longitude, latitude]) => globePoint(latitude, longitude, 1.012));
+            const points = ring.map(([longitude, latitude]) => globePoint(latitude, longitude, 1.016));
             if (points.length < 3) continue;
-            const curve = new THREE.CatmullRomCurve3(points, true, "centripetal");
-            globe.add(new THREE.Mesh(
-              new THREE.TubeGeometry(curve, Math.min(points.length * 2, 520), 0.006, 3, true),
-              new THREE.MeshBasicMaterial({ color: 0xe7bf70, transparent: true, opacity: 0.96 }),
-            ));
+            const positions = points.flatMap((point) => [point.x, point.y, point.z]);
+            const glowGeometry = new LineGeometry();
+            glowGeometry.setPositions(positions);
+            const glowLine = new Line2(glowGeometry, glowMaterial);
+            glowLine.computeLineDistances();
+            globe.add(glowLine);
+            const coreGeometry = new LineGeometry();
+            coreGeometry.setPositions(positions);
+            const coreLine = new Line2(coreGeometry, coreMaterial);
+            coreLine.computeLineDistances();
+            globe.add(coreLine);
           }
         }
       })
       .catch(console.error);
 
+    const clock = new THREE.Clock();
     const animate = () => {
       frame = requestAnimationFrame(animate);
       controls.update();
+      const time = clock.getElapsedTime();
       for (const marker of markers) {
         const active = marker.userData.footprintId === selectedIdRef.current;
-        marker.scale.setScalar(active ? 1.75 : 1);
-        (marker.material as THREE.MeshBasicMaterial).color.set(active ? 0xffffff : 0xe7bf70);
+        const pulse = active ? 1.45 + Math.sin(time * 2.4) * 0.12 : 1;
+        marker.scale.setScalar(pulse);
+        const material = marker.material as THREE.MeshBasicMaterial;
+        material.color.set(active ? 0xf3c978 : 0x7dc9ba);
+        material.opacity = active ? 1 : 0.78;
+      }
+      for (const visual of boundaryVisuals) {
+        const active = visual.city === selectedCityRef.current;
+        visual.core.color.set(active ? 0xf4c96f : 0x78c7b9);
+        visual.core.opacity = active ? 1 : 0.24;
+        visual.core.linewidth = active ? 2.7 : 1.05;
+        visual.glow.color.set(active ? 0x79ead5 : 0x4e9f9a);
+        visual.glow.opacity = active ? 0.24 + Math.sin(time * 2.2) * 0.06 : 0.018;
+        visual.glow.linewidth = active ? 7 : 3.2;
       }
       renderer.render(scene, camera);
     };
@@ -246,7 +296,13 @@ export function GlobeDiary() {
               <span className="place-dot" /><span><b>{item.city}</b><small>{item.country}</small></span><span className="place-count">{item.photos.length || "—"}</span>
             </button>
           ))}</div>
-          {selected && <div className="selection-panel"><div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div><PhotoStack key={selected.id} footprint={selected} /></div>}
+          {selected && <div className="selection-panel" key={selected.id}>
+            <div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
+            {PRESETS.some((item) => item.city === selected.city)
+              ? <div className="boundary-status"><i /><span>边界已高亮</span><small>金色实线为 {selected.city} 的行政边界</small></div>
+              : <div className="boundary-status"><i /><span>位置已标记</span><small>自定义地点显示为坐标点</small></div>}
+            <PhotoStack key={selected.id} footprint={selected} />
+          </div>}
         </aside>
       </section>
       <footer>地球影像：NASA/GSFC · 边界数据：© OpenStreetMap contributors</footer>
