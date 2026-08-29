@@ -3,6 +3,7 @@ import {
   deleteFootprint,
   ensureFootprintsTable,
   listFootprints,
+  storeFootprintPhotos,
 } from "../../../db/footprints";
 
 export const dynamic = "force-dynamic";
@@ -30,24 +31,36 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
-    const body = (await request.json()) as Record<string, unknown>;
-    const city = cleanText(body.city, 60);
-    const country = cleanText(body.country, 60);
-    const memory = cleanText(body.memory, 280);
-    const visitedAt = cleanText(body.visitedAt, 10);
-    const latitude = Number(body.latitude);
-    const longitude = Number(body.longitude);
+    const body = await request.formData();
+    const city = cleanText(body.get("city"), 60);
+    const country = cleanText(body.get("country"), 60);
+    const visitedAt = cleanText(body.get("visitedAt"), 10);
+    const latitude = Number(body.get("latitude"));
+    const longitude = Number(body.get("longitude"));
+    const files = body.getAll("photos").filter((item): item is File => item instanceof File && item.size > 0);
+    const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
-    if (!city || !country || !/^\d{4}-\d{2}-\d{2}$/.test(visitedAt)) {
-      return Response.json({ error: "请把城市、国家和日期填写完整" }, { status: 400 });
+    if (!city || !country || (visitedAt && !/^\d{4}-\d{2}-\d{2}$/.test(visitedAt))) {
+      return Response.json({ error: "请填写有效的城市和国家" }, { status: 400 });
     }
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
       return Response.json({ error: "请选择一个有效的地球位置" }, { status: 400 });
     }
+    if (files.length > 5) return Response.json({ error: "每个地点最多上传五张照片" }, { status: 400 });
+    if (files.some((file) => !supportedTypes.has(file.type) || file.size > 8 * 1024 * 1024)) {
+      return Response.json({ error: "仅支持 JPG、PNG、WebP、AVIF，且每张不超过 8MB" }, { status: 400 });
+    }
 
     await ensureFootprintsTable();
-    const footprint = await createFootprint({ city, country, latitude, longitude, visitedAt, memory });
-    return Response.json({ footprint }, { status: 201 });
+    const footprint = await createFootprint({ city, country, latitude, longitude, visitedAt });
+    if (!footprint) throw new Error("地点保存失败");
+    try {
+      await storeFootprintPhotos(footprint.id, files);
+    } catch (error) {
+      await deleteFootprint(footprint.id);
+      throw error;
+    }
+    return Response.json({ footprint: { ...footprint, photos: [] } }, { status: 201 });
   } catch (error) {
     return errorResponse(error);
   }
