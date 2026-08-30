@@ -113,8 +113,8 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     globe.rotation.y = Math.PI;
     scene.add(globe);
     const earthMaterial = new THREE.MeshStandardMaterial({
-      color: 0x123542,
-      emissive: 0x06171f,
+      color: 0x2b1d47,
+      emissive: 0x10091f,
       emissiveIntensity: 0.62,
       roughness: 0.88,
       metalness: 0.08,
@@ -125,13 +125,13 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     );
     globe.add(earth);
     let disposed = false;
-    scene.add(new THREE.HemisphereLight(0xb8e5df, 0x061117, 2.4));
-    const sunlight = new THREE.DirectionalLight(0xe7fff8, 2.2);
+    scene.add(new THREE.HemisphereLight(0xd8c9ff, 0x11091d, 2.4));
+    const sunlight = new THREE.DirectionalLight(0xf0e8ff, 2.2);
     sunlight.position.set(-3, 3, 4);
     scene.add(sunlight);
     globe.add(new THREE.Mesh(
       new THREE.SphereGeometry(1.025, 96, 72),
-      new THREE.MeshBasicMaterial({ color: 0x75cbbb, transparent: true, opacity: 0.075, side: THREE.BackSide }),
+      new THREE.MeshBasicMaterial({ color: 0xa78bfa, transparent: true, opacity: 0.085, side: THREE.BackSide }),
     ));
 
     const sharedPinGeometry = pinGeometry();
@@ -145,21 +145,21 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       marker.userData.city = footprint.city;
       marker.userData.surfaceNormal = surfaceNormal;
       const borderMaterial = new THREE.MeshBasicMaterial({
-        color: 0x112f42,
+        color: 0x2b1744,
         transparent: true,
         opacity: 0.94,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
       const pinMaterial = new THREE.MeshBasicMaterial({
-        color: 0x4fa5d8,
+        color: 0x8f70e8,
         transparent: true,
         opacity: 0.96,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
-      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0xb9e3f4, transparent: true, opacity: 0.96, side: THREE.DoubleSide, depthWrite: false });
-      const centerMaterial = new THREE.MeshBasicMaterial({ color: 0x18516d, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false });
+      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0xe3d8ff, transparent: true, opacity: 0.96, side: THREE.DoubleSide, depthWrite: false });
+      const centerMaterial = new THREE.MeshBasicMaterial({ color: 0x4a2e78, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false });
       const shadow = new THREE.Mesh(
         sharedPinGeometry,
         new THREE.MeshBasicMaterial({ color: 0x020b10, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }),
@@ -246,7 +246,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
 
     const lineMaterials: LineMaterial[] = [];
     const countryMaterial = new LineMaterial({
-      color: 0x7eb7b2,
+      color: 0xb7a5d8,
       transparent: true,
       opacity: 0.36,
       depthWrite: false,
@@ -267,7 +267,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     resize();
 
     const graticuleMaterial = new THREE.LineBasicMaterial({
-      color: 0x5e8d93,
+      color: 0x766993,
       transparent: true,
       opacity: 0.2,
       depthWrite: false,
@@ -298,14 +298,14 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
 
     const addCityBoundary = (feature: BoundaryFeature, city: string) => {
       const coreMaterial = new LineMaterial({
-        color: 0x559ee9,
+        color: 0x9a7bea,
         transparent: true,
         opacity: 0.72,
         depthWrite: false,
         linewidth: 1.5,
       });
       const fillMaterial = new THREE.MeshBasicMaterial({
-        color: 0x398de8,
+        color: 0x7656d8,
         transparent: true,
         opacity: 0,
         depthWrite: false,
@@ -384,17 +384,17 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
         const borderMaterial = marker.userData.borderMaterial as THREE.MeshBasicMaterial;
         const ringMaterial = marker.userData.ringMaterial as THREE.MeshBasicMaterial;
         const centerMaterial = marker.userData.centerMaterial as THREE.MeshBasicMaterial;
-        pinMaterial.color.set(hovered ? 0x72c8f5 : selected ? 0x5cb4e7 : 0x4b9dcc);
+        pinMaterial.color.set(hovered ? 0xbca5ff : selected ? 0x9b80ed : 0x8066d1);
         pinMaterial.opacity = hovered ? 1 : selected ? 0.98 : 0.9;
-        borderMaterial.color.set(hovered ? 0x17445e : 0x112f42);
+        borderMaterial.color.set(hovered ? 0x4b2b72 : 0x2b1744);
         borderMaterial.opacity = hovered ? 1 : 0.94;
-        ringMaterial.color.set(hovered ? 0xe1f4ff : 0xb9e3f4);
-        centerMaterial.color.set(hovered ? 0x246d91 : 0x18516d);
+        ringMaterial.color.set(hovered ? 0xf4efff : 0xe3d8ff);
+        centerMaterial.color.set(hovered ? 0x62428f : 0x4a2e78);
       }
       for (const visual of boundaryVisuals) {
         const hovered = visual.city === hoveredCity;
         const active = visual.city === selectedCityRef.current || hovered;
-        visual.core.color.set(active ? 0x82bfff : 0x4b97df);
+        visual.core.color.set(active ? 0xc2adff : 0x8b70dc);
         visual.core.opacity = active ? 0.9 : 0.7;
         visual.core.linewidth = active ? 2.2 : 1.45;
         visual.fill.opacity = active ? (hovered ? 0.39 : 0.31) + Math.sin(time * 2.1) * 0.018 : 0;
@@ -488,9 +488,9 @@ export function GlobeDiary() {
 
   return (
     <main className="site-shell">
-      <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
+      <header className="topbar"><p className="brand-wordmark">MAKE LOVE ATLAS</p><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
       <section className="workspace">
-        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">移入图钉预览蓝色填充 · 点击保持选中 · 拖动旋转，滚轮放大</p></div>
+        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">移入图钉预览紫色填充 · 点击保持选中 · 拖动旋转，滚轮放大</p></div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
@@ -500,7 +500,7 @@ export function GlobeDiary() {
           ))}</div>
           {selected && <div className="selection-panel" key={selected.id}>
             <div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
-            <div className="boundary-status"><i /><span>城市已选中</span><small>蓝色填充为 {selected.city} 的行政区域</small></div>
+            <div className="boundary-status"><i /><span>城市已选中</span><small>紫色填充为 {selected.city} 的行政区域</small></div>
             <PhotoStack key={selected.id} footprint={selected} />
           </div>}
         </aside>
