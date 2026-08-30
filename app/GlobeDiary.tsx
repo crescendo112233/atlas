@@ -72,6 +72,19 @@ function mapFill(polygon: number[][][], radius: number, material: THREE.MeshBasi
   return mesh;
 }
 
+function pinGeometry() {
+  const pin = new THREE.Shape();
+  pin.moveTo(0, -0.034);
+  pin.bezierCurveTo(-0.005, -0.022, -0.015, -0.012, -0.015, 0.004);
+  pin.bezierCurveTo(-0.015, 0.018, -0.008, 0.026, 0, 0.026);
+  pin.bezierCurveTo(0.008, 0.026, 0.015, 0.018, 0.015, 0.004);
+  pin.bezierCurveTo(0.015, -0.012, 0.005, -0.022, 0, -0.034);
+  const center = new THREE.Path();
+  center.absarc(0, 0.006, 0.0048, 0, Math.PI * 2, true);
+  pin.holes.push(center);
+  return new THREE.ShapeGeometry(pin, 20);
+}
+
 function GlobeCanvas({ footprints, selectedId, onSelect }: {
   footprints: Footprint[]; selectedId: number | null; onSelect: (id: number) => void;
 }) {
@@ -107,10 +120,11 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       roughness: 0.88,
       metalness: 0.08,
     });
-    globe.add(new THREE.Mesh(
+    const earth = new THREE.Mesh(
       new THREE.SphereGeometry(1, 128, 96),
       earthMaterial,
-    ));
+    );
+    globe.add(earth);
     let disposed = false;
     scene.add(new THREE.HemisphereLight(0xb8e5df, 0x061117, 2.4));
     const sunlight = new THREE.DirectionalLight(0xe7fff8, 2.2);
@@ -121,16 +135,44 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       new THREE.MeshBasicMaterial({ color: 0x75cbbb, transparent: true, opacity: 0.075, side: THREE.BackSide }),
     ));
 
+    const markerNormal = new THREE.Vector3(0, 0, 1);
+    const sharedPinGeometry = pinGeometry();
     const markers = footprints.map((footprint) => {
       const marker = new THREE.Group();
       const surfaceNormal = globePoint(footprint.latitude, footprint.longitude).normalize();
-      marker.position.copy(surfaceNormal.clone().multiplyScalar(1.025));
+      marker.position.copy(surfaceNormal.clone().multiplyScalar(1.031));
+      marker.quaternion.setFromUnitVectors(markerNormal, surfaceNormal);
       marker.userData.footprintId = footprint.id;
+      marker.userData.city = footprint.city;
+      marker.userData.surfaceNormal = surfaceNormal;
+      const borderMaterial = new THREE.MeshBasicMaterial({
+        color: 0x092b3d,
+        transparent: true,
+        opacity: 0.9,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const pinMaterial = new THREE.MeshBasicMaterial({
+        color: 0x69b6ed,
+        transparent: true,
+        opacity: 0.88,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      });
+      const border = new THREE.Mesh(sharedPinGeometry, borderMaterial);
+      border.scale.setScalar(1.16);
+      border.position.z = -0.0007;
+      border.renderOrder = 5;
+      const icon = new THREE.Mesh(sharedPinGeometry, pinMaterial);
+      icon.position.z = 0.0005;
+      icon.renderOrder = 6;
+      marker.userData.pinMaterial = pinMaterial;
+      marker.userData.borderMaterial = borderMaterial;
       const hitArea = new THREE.Mesh(
-        new THREE.SphereGeometry(0.035, 10, 10),
+        new THREE.SphereGeometry(0.043, 10, 10),
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
       );
-      marker.add(hitArea);
+      marker.add(border, icon, hitArea);
       globe.add(marker);
       return marker;
     });
@@ -152,15 +194,35 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
 
     const raycaster = new THREE.Raycaster();
     const pointer = new THREE.Vector2();
-    const pick = (event: PointerEvent) => {
+    let hoveredMarkerId: number | null = null;
+    let hoveredCity = "";
+    const updatePointer = (event: PointerEvent) => {
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
-      const hit = raycaster.intersectObjects(markers, true)[0];
-      const footprintId = hit?.object.parent?.userData.footprintId;
+      const hit = raycaster.intersectObjects([earth, ...markers], true)[0];
+      return hit?.object === earth ? null : hit?.object.parent;
+    };
+    const hoverPin = (event: PointerEvent) => {
+      const marker = updatePointer(event);
+      hoveredMarkerId = marker?.userData.footprintId ?? null;
+      hoveredCity = marker?.userData.city ?? "";
+      if (hoveredMarkerId) controls.autoRotate = false;
+      renderer.domElement.style.cursor = hoveredMarkerId ? "pointer" : "grab";
+    };
+    const clearHover = () => {
+      hoveredMarkerId = null;
+      hoveredCity = "";
+      renderer.domElement.style.cursor = "grab";
+    };
+    const pick = (event: PointerEvent) => {
+      const marker = updatePointer(event);
+      const footprintId = marker?.userData.footprintId;
       if (footprintId) onSelectRef.current(footprintId as number);
     };
+    renderer.domElement.addEventListener("pointermove", hoverPin);
+    renderer.domElement.addEventListener("pointerleave", clearHover);
     renderer.domElement.addEventListener("pointerup", pick);
 
     const lineMaterials: LineMaterial[] = [];
@@ -259,6 +321,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
 
     const animationStartedAt = performance.now();
     const cameraDirection = new THREE.Vector3();
+    const markerWorldPosition = new THREE.Vector3();
     const animate = () => {
       frame = requestAnimationFrame(animate);
       if (selectedIdRef.current !== lastFocusedId) {
@@ -277,12 +340,32 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       }
       controls.update();
       const time = (performance.now() - animationStartedAt) / 1000;
+      for (const marker of markers) {
+        const hovered = marker.userData.footprintId === hoveredMarkerId;
+        const selected = marker.userData.footprintId === selectedIdRef.current;
+        marker.getWorldPosition(markerWorldPosition);
+        const distance = camera.position.distanceTo(markerWorldPosition);
+        const screenScale = THREE.MathUtils.clamp(distance * 0.34, 0.055, 1.45);
+        const emphasis = hovered ? 1.48 : selected ? 1.08 + Math.sin(time * 2.1) * 0.025 : 1;
+        const nextScale = THREE.MathUtils.lerp(marker.scale.x, screenScale * emphasis, hovered ? 0.22 : 0.14);
+        marker.scale.setScalar(nextScale);
+        const surfaceNormal = marker.userData.surfaceNormal as THREE.Vector3;
+        const nextRadius = THREE.MathUtils.lerp(marker.position.length(), hovered ? 1.046 : 1.031, 0.16);
+        marker.position.copy(surfaceNormal).multiplyScalar(nextRadius);
+        const pinMaterial = marker.userData.pinMaterial as THREE.MeshBasicMaterial;
+        const borderMaterial = marker.userData.borderMaterial as THREE.MeshBasicMaterial;
+        pinMaterial.color.set(hovered ? 0xa4d6ff : selected ? 0x7bc3f5 : 0x5ca9df);
+        pinMaterial.opacity = hovered ? 1 : selected ? 0.96 : 0.82;
+        borderMaterial.color.set(hovered ? 0x174a69 : 0x092b3d);
+        borderMaterial.opacity = hovered ? 1 : 0.86;
+      }
       for (const visual of boundaryVisuals) {
-        const active = visual.city === selectedCityRef.current;
+        const hovered = visual.city === hoveredCity;
+        const active = visual.city === selectedCityRef.current || hovered;
         visual.core.color.set(active ? 0x82bfff : 0x4b97df);
         visual.core.opacity = active ? 0.9 : 0.7;
         visual.core.linewidth = active ? 2.2 : 1.45;
-        visual.fill.opacity = active ? 0.32 + Math.sin(time * 2.1) * 0.025 : 0;
+        visual.fill.opacity = active ? (hovered ? 0.39 : 0.31) + Math.sin(time * 2.1) * 0.018 : 0;
       }
       renderer.render(scene, camera);
     };
@@ -292,6 +375,8 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       disposed = true;
       cancelAnimationFrame(frame);
       observer.disconnect();
+      renderer.domElement.removeEventListener("pointermove", hoverPin);
+      renderer.domElement.removeEventListener("pointerleave", clearHover);
       renderer.domElement.removeEventListener("pointerup", pick);
       controls.removeEventListener("start", stopFocus);
       controls.dispose();
@@ -373,7 +458,7 @@ export function GlobeDiary() {
     <main className="site-shell">
       <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
       <section className="workspace">
-        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">选中城市显示蓝色填充 · 其他城市显示蓝色边界 · 拖动旋转，滚轮放大</p></div>
+        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">移入图钉预览蓝色填充 · 点击保持选中 · 拖动旋转，滚轮放大</p></div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
