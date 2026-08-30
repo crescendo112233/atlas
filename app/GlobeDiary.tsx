@@ -74,15 +74,14 @@ function mapFill(polygon: number[][][], radius: number, material: THREE.MeshBasi
 
 function pinGeometry() {
   const pin = new THREE.Shape();
-  pin.moveTo(0, -0.034);
-  pin.bezierCurveTo(-0.005, -0.022, -0.015, -0.012, -0.015, 0.004);
-  pin.bezierCurveTo(-0.015, 0.018, -0.008, 0.026, 0, 0.026);
-  pin.bezierCurveTo(0.008, 0.026, 0.015, 0.018, 0.015, 0.004);
-  pin.bezierCurveTo(0.015, -0.012, 0.005, -0.022, 0, -0.034);
-  const center = new THREE.Path();
-  center.absarc(0, 0.006, 0.0048, 0, Math.PI * 2, true);
-  pin.holes.push(center);
-  return new THREE.ShapeGeometry(pin, 20);
+  pin.moveTo(0, -0.043);
+  pin.bezierCurveTo(-0.006, -0.027, -0.022, -0.011, -0.022, 0.011);
+  pin.bezierCurveTo(-0.022, 0.028, -0.012, 0.038, 0, 0.038);
+  pin.bezierCurveTo(0.012, 0.038, 0.022, 0.028, 0.022, 0.011);
+  pin.bezierCurveTo(0.022, -0.011, 0.006, -0.027, 0, -0.043);
+  const geometry = new THREE.ShapeGeometry(pin, 24);
+  geometry.translate(0, 0.043, 0);
+  return geometry;
 }
 
 function GlobeCanvas({ footprints, selectedId, onSelect }: {
@@ -135,55 +134,75 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       new THREE.MeshBasicMaterial({ color: 0x75cbbb, transparent: true, opacity: 0.075, side: THREE.BackSide }),
     ));
 
-    const markerNormal = new THREE.Vector3(0, 0, 1);
     const sharedPinGeometry = pinGeometry();
+    const sharedRingGeometry = new THREE.RingGeometry(0.007, 0.0115, 32);
+    const sharedCenterGeometry = new THREE.CircleGeometry(0.0047, 24);
     const markers = footprints.map((footprint) => {
       const marker = new THREE.Group();
       const surfaceNormal = globePoint(footprint.latitude, footprint.longitude).normalize();
       marker.position.copy(surfaceNormal.clone().multiplyScalar(1.031));
-      marker.quaternion.setFromUnitVectors(markerNormal, surfaceNormal);
       marker.userData.footprintId = footprint.id;
       marker.userData.city = footprint.city;
       marker.userData.surfaceNormal = surfaceNormal;
       const borderMaterial = new THREE.MeshBasicMaterial({
-        color: 0x092b3d,
+        color: 0x112f42,
         transparent: true,
-        opacity: 0.9,
+        opacity: 0.94,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
       const pinMaterial = new THREE.MeshBasicMaterial({
-        color: 0x69b6ed,
+        color: 0x4fa5d8,
         transparent: true,
-        opacity: 0.88,
+        opacity: 0.96,
         side: THREE.DoubleSide,
         depthWrite: false,
       });
+      const ringMaterial = new THREE.MeshBasicMaterial({ color: 0xb9e3f4, transparent: true, opacity: 0.96, side: THREE.DoubleSide, depthWrite: false });
+      const centerMaterial = new THREE.MeshBasicMaterial({ color: 0x18516d, transparent: true, opacity: 0.92, side: THREE.DoubleSide, depthWrite: false });
+      const shadow = new THREE.Mesh(
+        sharedPinGeometry,
+        new THREE.MeshBasicMaterial({ color: 0x020b10, transparent: true, opacity: 0.2, side: THREE.DoubleSide, depthWrite: false }),
+      );
+      shadow.scale.setScalar(1.24);
+      shadow.position.set(0.003, -0.003, -0.0012);
+      shadow.renderOrder = 5;
       const border = new THREE.Mesh(sharedPinGeometry, borderMaterial);
-      border.scale.setScalar(1.16);
-      border.position.z = -0.0007;
-      border.renderOrder = 5;
+      border.scale.setScalar(1.12);
+      border.position.z = -0.0005;
+      border.renderOrder = 6;
       const icon = new THREE.Mesh(sharedPinGeometry, pinMaterial);
       icon.position.z = 0.0005;
-      icon.renderOrder = 6;
+      icon.renderOrder = 7;
+      const ring = new THREE.Mesh(sharedRingGeometry, ringMaterial);
+      ring.position.set(0, 0.055, 0.0011);
+      ring.renderOrder = 8;
+      const center = new THREE.Mesh(sharedCenterGeometry, centerMaterial);
+      center.position.set(0, 0.055, 0.0013);
+      center.renderOrder = 9;
       marker.userData.pinMaterial = pinMaterial;
       marker.userData.borderMaterial = borderMaterial;
+      marker.userData.ringMaterial = ringMaterial;
+      marker.userData.centerMaterial = centerMaterial;
       const hitArea = new THREE.Mesh(
-        new THREE.SphereGeometry(0.043, 10, 10),
+        new THREE.SphereGeometry(0.062, 10, 10),
         new THREE.MeshBasicMaterial({ transparent: true, opacity: 0, depthWrite: false }),
       );
-      marker.add(border, icon, hitArea);
+      hitArea.position.y = 0.038;
+      marker.add(shadow, border, icon, ring, center, hitArea);
       globe.add(marker);
       return marker;
     });
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
+    controls.dampingFactor = 0.045;
     controls.enablePan = false;
     controls.minDistance = 1.12;
     controls.maxDistance = 5.2;
     controls.zoomSpeed = 0.9;
-    controls.zoomToCursor = true;
+    controls.zoomToCursor = false;
+    controls.rotateSpeed = 0.36;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.26;
     let focusDirection: THREE.Vector3 | null = null;
@@ -322,6 +341,8 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const animationStartedAt = performance.now();
     const cameraDirection = new THREE.Vector3();
     const markerWorldPosition = new THREE.Vector3();
+    const globeWorldQuaternion = new THREE.Quaternion();
+    const billboardQuaternion = new THREE.Quaternion();
     const animate = () => {
       frame = requestAnimationFrame(animate);
       if (selectedIdRef.current !== lastFocusedId) {
@@ -338,7 +359,13 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
         camera.position.copy(cameraDirection.multiplyScalar(focusDistance));
         if (camera.position.clone().normalize().angleTo(focusDirection) < 0.002) focusDirection = null;
       }
+      const orbitDistance = camera.position.length();
+      const distanceRatio = THREE.MathUtils.clamp((orbitDistance - controls.minDistance) / (controls.maxDistance - controls.minDistance), 0, 1);
+      controls.rotateSpeed = THREE.MathUtils.lerp(0.055, 0.42, Math.pow(distanceRatio, 0.7));
+      controls.target.set(0, 0, 0);
       controls.update();
+      globe.getWorldQuaternion(globeWorldQuaternion);
+      billboardQuaternion.copy(globeWorldQuaternion).invert().multiply(camera.quaternion);
       const time = (performance.now() - animationStartedAt) / 1000;
       for (const marker of markers) {
         const hovered = marker.userData.footprintId === hoveredMarkerId;
@@ -346,18 +373,23 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
         marker.getWorldPosition(markerWorldPosition);
         const distance = camera.position.distanceTo(markerWorldPosition);
         const screenScale = THREE.MathUtils.clamp(distance * 0.34, 0.055, 1.45);
-        const emphasis = hovered ? 1.48 : selected ? 1.08 + Math.sin(time * 2.1) * 0.025 : 1;
+        const emphasis = hovered ? 1.38 : selected ? 1.06 + Math.sin(time * 2.1) * 0.02 : 1;
         const nextScale = THREE.MathUtils.lerp(marker.scale.x, screenScale * emphasis, hovered ? 0.22 : 0.14);
         marker.scale.setScalar(nextScale);
+        marker.quaternion.copy(billboardQuaternion);
         const surfaceNormal = marker.userData.surfaceNormal as THREE.Vector3;
         const nextRadius = THREE.MathUtils.lerp(marker.position.length(), hovered ? 1.046 : 1.031, 0.16);
         marker.position.copy(surfaceNormal).multiplyScalar(nextRadius);
         const pinMaterial = marker.userData.pinMaterial as THREE.MeshBasicMaterial;
         const borderMaterial = marker.userData.borderMaterial as THREE.MeshBasicMaterial;
-        pinMaterial.color.set(hovered ? 0xa4d6ff : selected ? 0x7bc3f5 : 0x5ca9df);
-        pinMaterial.opacity = hovered ? 1 : selected ? 0.96 : 0.82;
-        borderMaterial.color.set(hovered ? 0x174a69 : 0x092b3d);
-        borderMaterial.opacity = hovered ? 1 : 0.86;
+        const ringMaterial = marker.userData.ringMaterial as THREE.MeshBasicMaterial;
+        const centerMaterial = marker.userData.centerMaterial as THREE.MeshBasicMaterial;
+        pinMaterial.color.set(hovered ? 0x72c8f5 : selected ? 0x5cb4e7 : 0x4b9dcc);
+        pinMaterial.opacity = hovered ? 1 : selected ? 0.98 : 0.9;
+        borderMaterial.color.set(hovered ? 0x17445e : 0x112f42);
+        borderMaterial.opacity = hovered ? 1 : 0.94;
+        ringMaterial.color.set(hovered ? 0xe1f4ff : 0xb9e3f4);
+        centerMaterial.color.set(hovered ? 0x246d91 : 0x18516d);
       }
       for (const visual of boundaryVisuals) {
         const hovered = visual.city === hoveredCity;
