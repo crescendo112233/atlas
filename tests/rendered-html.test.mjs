@@ -23,15 +23,22 @@ test("server-renders the restrained globe workspace", async () => {
   assert.doesNotMatch(html, /悄悄话|粉色泡泡/);
 });
 
-test("ships the cartographic globe, boundary, and photo-storage configuration", async () => {
-  const [component, hosting, boundaries, countries] = await Promise.all([
+test("ships the cartographic globe, automatic city boundary, and photo-storage configuration", async () => {
+  const [component, route, migration, hosting, boundaries, countries] = await Promise.all([
     readFile(new URL("../app/GlobeDiary.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../app/api/footprints/route.ts", import.meta.url), "utf8"),
+    readFile(new URL("../drizzle/0002_curly_changeling.sql", import.meta.url), "utf8"),
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../public/visited-boundaries.json", import.meta.url), "utf8"),
     readFile(new URL("../public/world-countries.geojson", import.meta.url), "utf8"),
   ]);
   assert.doesNotMatch(component, /earth-blue-marble/);
   assert.match(component, /world-countries\.geojson/);
+  assert.match(component, /蓝色填充/);
+  assert.match(component, /城市名称/);
+  assert.doesNotMatch(component, /国家或地区|纬度<input|经度<input/);
+  assert.match(route, /polygon_geojson/);
+  assert.match(migration, /boundary_geojson/);
   assert.match(component, /最多五张/);
   assert.equal(JSON.parse(hosting).r2, "MEDIA");
   assert.equal(JSON.parse(boundaries).features.length, 7);

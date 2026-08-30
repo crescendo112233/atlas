@@ -3,19 +3,75 @@ import {
   countFootprintPhotos,
   deleteFootprint,
   ensureFootprintsTable,
+  findFootprintLocation,
   listFootprints,
   storeFootprintPhotos,
 } from "../../../db/footprints";
 
 export const dynamic = "force-dynamic";
 
+const CITY_SEARCH_ENDPOINT = "https://nominatim.openstreetmap.org/search";
+
+type CitySearchResult = {
+  lat: string;
+  lon: string;
+  display_name: string;
+  address?: { country?: string };
+  geojson?: { type?: string; coordinates?: unknown };
+};
+
+class RequestError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
 function cleanText(value: unknown, maxLength: number) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
 function errorResponse(error: unknown) {
+  if (error instanceof RequestError) return Response.json({ error: error.message }, { status: error.status });
   console.error(error);
   return Response.json({ error: "暂时没有保存成功，请稍后再试" }, { status: 500 });
+}
+
+async function resolveCity(city: string) {
+  const url = new URL(CITY_SEARCH_ENDPOINT);
+  url.searchParams.set("q", city);
+  url.searchParams.set("format", "jsonv2");
+  url.searchParams.set("addressdetails", "1");
+  url.searchParams.set("polygon_geojson", "1");
+  url.searchParams.set("polygon_threshold", "0.0008");
+  url.searchParams.set("limit", "6");
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.5",
+        "Referer": "https://our-planet-diary-sz-sg.quzheping112233.chatgpt.site/",
+        "User-Agent": "OurPlanetDiary/1.0 (+https://our-planet-diary-sz-sg.quzheping112233.chatgpt.site)",
+      },
+    });
+  } catch {
+    throw new RequestError("城市边界服务暂时不可用，请稍后再试", 503);
+  }
+  if (!response.ok) throw new RequestError("城市边界服务暂时不可用，请稍后再试", 503);
+  const results = await response.json() as CitySearchResult[];
+  const result = results.find((item) => item.geojson?.type === "Polygon" || item.geojson?.type === "MultiPolygon");
+  if (!result?.geojson || (result.geojson.type !== "Polygon" && result.geojson.type !== "MultiPolygon")) {
+    throw new RequestError("没有找到这个城市的行政边界，请试试更完整的城市名称", 404);
+  }
+  const latitude = Number(result.lat);
+  const longitude = Number(result.lon);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new RequestError("没有找到这个城市的准确位置", 404);
+  }
+  return {
+    city,
+    country: result.address?.country ?? result.display_name.split(",").at(-1)?.trim() ?? "未知地区",
+    latitude,
+    longitude,
+    boundaryGeoJson: JSON.stringify(result.geojson),
+  };
 }
 
 export async function GET() {
@@ -34,18 +90,12 @@ export async function POST(request: Request) {
   try {
     const body = await request.formData();
     const city = cleanText(body.get("city"), 60);
-    const country = cleanText(body.get("country"), 60);
     const visitedAt = cleanText(body.get("visitedAt"), 10);
-    const latitude = Number(body.get("latitude"));
-    const longitude = Number(body.get("longitude"));
     const files = body.getAll("photos").filter((item): item is File => item instanceof File && item.size > 0);
     const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
-    if (!city || !country || (visitedAt && !/^\d{4}-\d{2}-\d{2}$/.test(visitedAt))) {
-      return Response.json({ error: "请填写有效的城市和国家" }, { status: 400 });
-    }
-    if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
-      return Response.json({ error: "请选择一个有效的地球位置" }, { status: 400 });
+    if (!city || (visitedAt && !/^\d{4}-\d{2}-\d{2}$/.test(visitedAt))) {
+      return Response.json({ error: "请输入有效的城市名称" }, { status: 400 });
     }
     if (files.length > 5) return Response.json({ error: "每个地点最多上传五张照片" }, { status: 400 });
     if (files.some((file) => !supportedTypes.has(file.type) || file.size > 8 * 1024 * 1024)) {
@@ -53,7 +103,9 @@ export async function POST(request: Request) {
     }
 
     await ensureFootprintsTable();
-    const result = await createFootprint({ city, country, latitude, longitude, visitedAt });
+    const cachedCity = await findFootprintLocation(city);
+    const resolvedCity = cachedCity ?? await resolveCity(city);
+    const result = await createFootprint({ ...resolvedCity, visitedAt });
     const footprint = result.footprint;
     if (!footprint) throw new Error("地点保存失败");
     const existingPhotoCount = await countFootprintPhotos(footprint.id);

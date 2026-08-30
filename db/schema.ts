@@ -9,6 +9,7 @@ export const footprints = sqliteTable(
     country: text("country").notNull(),
     latitude: real("latitude").notNull(),
     longitude: real("longitude").notNull(),
+    boundaryGeoJson: text("boundary_geojson").notNull().default(""),
     visitedAt: text("visited_at").notNull(),
     memory: text("memory").notNull().default(""),
     createdAt: text("created_at").notNull().default(sql`CURRENT_TIMESTAMP`),

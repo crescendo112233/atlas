@@ -1,0 +1,1 @@
+ALTER TABLE `footprints` ADD `boundary_geojson` text DEFAULT '' NOT NULL;

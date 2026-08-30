@@ -10,6 +10,7 @@ import { LineMaterial } from "three/examples/jsm/lines/LineMaterial.js";
 type Photo = { id: number; url: string; contentType: string; sortOrder: number };
 type Footprint = {
   id: number; city: string; country: string; latitude: number; longitude: number;
+  boundary: BoundaryFeature["geometry"] | null;
   visitedAt: string; createdAt: string; photos: Photo[];
 };
 type BoundaryFeature = {
@@ -17,15 +18,7 @@ type BoundaryFeature = {
   geometry: { type: "Polygon" | "MultiPolygon"; coordinates: unknown };
 };
 
-const PRESETS = [
-  { key: "singapore", city: "新加坡", country: "新加坡", latitude: 1.3521, longitude: 103.8198 },
-  { key: "chongqing", city: "重庆", country: "中国", latitude: 29.563, longitude: 106.5516 },
-  { key: "chengdu", city: "成都", country: "中国", latitude: 30.5728, longitude: 104.0668 },
-  { key: "bangkok", city: "曼谷", country: "泰国", latitude: 13.7563, longitude: 100.5018 },
-  { key: "hakodate", city: "函馆", country: "日本", latitude: 41.7687, longitude: 140.7288 },
-  { key: "otaru", city: "小樽", country: "日本", latitude: 43.1907, longitude: 140.9947 },
-  { key: "sapporo", city: "札幌", country: "日本", latitude: 43.0618, longitude: 141.3545 },
-];
+const SEEDED_CITIES = new Set(["新加坡", "重庆", "成都", "曼谷", "函馆", "小樽", "札幌"]);
 
 function globePoint(latitude: number, longitude: number, radius = 1) {
   const phi = THREE.MathUtils.degToRad(90 - latitude);
@@ -42,6 +35,11 @@ function boundaryRings(feature: BoundaryFeature): number[][][] {
   return (feature.geometry.coordinates as number[][][][]).flat();
 }
 
+function boundaryPolygons(feature: BoundaryFeature): number[][][][] {
+  if (feature.geometry.type === "Polygon") return [feature.geometry.coordinates as number[][][]];
+  return feature.geometry.coordinates as number[][][][];
+}
+
 function mapLine(ring: number[][], radius: number, material: LineMaterial) {
   const positions = ring.flatMap(([longitude, latitude]) => {
     const point = globePoint(latitude, longitude, radius);
@@ -53,6 +51,25 @@ function mapLine(ring: number[][], radius: number, material: LineMaterial) {
   const line = new Line2(geometry, material);
   line.computeLineDistances();
   return line;
+}
+
+function mapFill(polygon: number[][][], radius: number, material: THREE.MeshBasicMaterial) {
+  const contour = polygon[0]?.map(([longitude, latitude]) => new THREE.Vector2(longitude, latitude)) ?? [];
+  const holes = polygon.slice(1).map((ring) => ring.map(([longitude, latitude]) => new THREE.Vector2(longitude, latitude)));
+  if (contour.length < 3) return null;
+  const faces = THREE.ShapeUtils.triangulateShape(contour, holes);
+  const vertices = [...contour, ...holes.flat()];
+  if (!faces.length || !vertices.length) return null;
+  const positions = vertices.flatMap((point) => {
+    const vertex = globePoint(point.y, point.x, radius);
+    return [vertex.x, vertex.y, vertex.z];
+  });
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  geometry.setIndex(faces.flat());
+  const mesh = new THREE.Mesh(geometry, material);
+  mesh.renderOrder = 3;
+  return mesh;
 }
 
 function GlobeCanvas({ footprints, selectedId, onSelect }: {
@@ -155,7 +172,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       linewidth: 0.78,
     });
     lineMaterials.push(countryMaterial);
-    const boundaryVisuals: Array<{ city: string; core: LineMaterial; glow: LineMaterial }> = [];
+    const boundaryVisuals: Array<{ city: string; core: LineMaterial; fill: THREE.MeshBasicMaterial }> = [];
     let frame = 0;
     const resize = () => {
       const { clientWidth, clientHeight } = mount;
@@ -192,43 +209,51 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
         for (const feature of collection.features) {
           for (const ring of boundaryRings(feature)) {
             const line = mapLine(ring, 1.006, countryMaterial);
-            if (line) globe.add(line);
+            if (line) { line.renderOrder = 1; globe.add(line); }
           }
         }
       })
       .catch(console.error);
 
+    const addCityBoundary = (feature: BoundaryFeature, city: string) => {
+      const coreMaterial = new LineMaterial({
+        color: 0x559ee9,
+        transparent: true,
+        opacity: 0.72,
+        depthWrite: false,
+        linewidth: 1.5,
+      });
+      const fillMaterial = new THREE.MeshBasicMaterial({
+        color: 0x398de8,
+        transparent: true,
+        opacity: 0,
+        depthWrite: false,
+        side: THREE.DoubleSide,
+      });
+      coreMaterial.resolution.set(mount.clientWidth, mount.clientHeight);
+      lineMaterials.push(coreMaterial);
+      boundaryVisuals.push({ city, core: coreMaterial, fill: fillMaterial });
+      for (const polygon of boundaryPolygons(feature)) {
+        const fill = mapFill(polygon, 1.013, fillMaterial);
+        if (fill) globe.add(fill);
+      }
+      for (const ring of boundaryRings(feature)) {
+        const coreLine = mapLine(ring, 1.019, coreMaterial);
+        if (coreLine) { coreLine.renderOrder = 4; globe.add(coreLine); }
+      }
+    };
+
+    for (const footprint of footprints) {
+      if (footprint.boundary && !SEEDED_CITIES.has(footprint.city)) {
+        addCityBoundary({ properties: { name: footprint.city }, geometry: footprint.boundary }, footprint.city);
+      }
+    }
+
     fetch("/visited-boundaries.json")
       .then((response) => response.json())
       .then((collection: { features: BoundaryFeature[] }) => {
         if (disposed) return;
-        for (const feature of collection.features) {
-          const coreMaterial = new LineMaterial({
-            color: 0x79d4c4,
-            transparent: true,
-            opacity: 0.58,
-            depthWrite: false,
-            linewidth: 1.65,
-          });
-          const glowMaterial = new LineMaterial({
-            color: 0xf4ca6f,
-            transparent: true,
-            opacity: 0.015,
-            depthWrite: false,
-            linewidth: 5,
-            blending: THREE.AdditiveBlending,
-          });
-          coreMaterial.resolution.set(mount.clientWidth, mount.clientHeight);
-          glowMaterial.resolution.set(mount.clientWidth, mount.clientHeight);
-          lineMaterials.push(coreMaterial, glowMaterial);
-          boundaryVisuals.push({ city: String(feature.properties.name ?? ""), core: coreMaterial, glow: glowMaterial });
-          for (const ring of boundaryRings(feature)) {
-            const glowLine = mapLine(ring, 1.017, glowMaterial);
-            const coreLine = mapLine(ring, 1.019, coreMaterial);
-            if (glowLine) globe.add(glowLine);
-            if (coreLine) globe.add(coreLine);
-          }
-        }
+        for (const feature of collection.features) addCityBoundary(feature, String(feature.properties.name ?? ""));
       })
       .catch(console.error);
 
@@ -254,12 +279,10 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       const time = (performance.now() - animationStartedAt) / 1000;
       for (const visual of boundaryVisuals) {
         const active = visual.city === selectedCityRef.current;
-        visual.core.color.set(active ? 0xf6cf76 : 0x79d4c4);
-        visual.core.opacity = active ? 1 : 0.52;
-        visual.core.linewidth = active ? 4.4 : 1.55;
-        visual.glow.color.set(active ? 0xf6cf76 : 0x55b9ae);
-        visual.glow.opacity = active ? 0.13 + Math.sin(time * 2.2) * 0.025 : 0.012;
-        visual.glow.linewidth = active ? 9 : 4;
+        visual.core.color.set(active ? 0x82bfff : 0x4b97df);
+        visual.core.opacity = active ? 0.9 : 0.7;
+        visual.core.linewidth = active ? 2.2 : 1.45;
+        visual.fill.opacity = active ? 0.32 + Math.sin(time * 2.1) * 0.025 : 0;
       }
       renderer.render(scene, camera);
     };
@@ -310,22 +333,20 @@ export function GlobeDiary() {
   const [footprints, setFootprints] = useState<Footprint[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
-  const [presetKey, setPresetKey] = useState(PRESETS[0].key);
-  const [customPlace, setCustomPlace] = useState({ city: "", country: "", latitude: "", longitude: "" });
+  const [cityName, setCityName] = useState("");
   const [visitedAt, setVisitedAt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
   const selected = useMemo(() => footprints.find((item) => item.id === selectedId) ?? footprints[0] ?? null, [footprints, selectedId]);
-  const preset = PRESETS.find((item) => item.key === presetKey);
-  const load = async () => {
+  const load = async (selectId?: number) => {
     const response = await fetch("/api/footprints", { cache: "no-store" });
     const data = await response.json() as { footprints?: Footprint[]; error?: string };
     if (!response.ok) throw new Error(data.error ?? "读取失败");
     const next = (data.footprints ?? []).map((item) => ({ ...item, photos: item.photos ?? [] }));
     setFootprints(next);
-    setSelectedId((current) => current ?? next[0]?.id ?? null);
+    setSelectedId((current) => selectId ?? current ?? next[0]?.id ?? null);
   };
   useEffect(() => {
     const timer = window.setTimeout(() => { load().catch(() => setNotice("暂时无法读取地点")); }, 0);
@@ -337,14 +358,13 @@ export function GlobeDiary() {
     if (files.length > 5) return setNotice("每个地点最多上传五张照片");
     setBusy(true); setNotice("");
     const body = new FormData();
-    body.set("city", preset?.city ?? customPlace.city); body.set("country", preset?.country ?? customPlace.country);
-    body.set("latitude", String(preset?.latitude ?? customPlace.latitude)); body.set("longitude", String(preset?.longitude ?? customPlace.longitude));
+    body.set("city", cityName);
     body.set("visitedAt", visitedAt); files.forEach((file) => body.append("photos", file));
     try {
       const response = await fetch("/api/footprints", { method: "POST", body });
-      const data = await response.json() as { error?: string };
+      const data = await response.json() as { error?: string; footprint?: { id: number } };
       if (!response.ok) throw new Error(data.error ?? "保存失败");
-      await load(); setFormOpen(false); setFiles([]); setVisitedAt("");
+      await load(data.footprint?.id); setFormOpen(false); setFiles([]); setVisitedAt(""); setCityName("");
     } catch (error) { setNotice(error instanceof Error ? error.message : "保存失败"); }
     finally { setBusy(false); }
   };
@@ -353,7 +373,7 @@ export function GlobeDiary() {
     <main className="site-shell">
       <header className="topbar"><div><p className="eyebrow">PRIVATE ATLAS</p><h1>我们的地球</h1></div><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
       <section className="workspace">
-        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">右侧选择城市 · 金色粗线显示行政边界 · 拖动旋转，滚轮放大</p></div>
+        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">选中城市显示蓝色填充 · 其他城市显示蓝色边界 · 拖动旋转，滚轮放大</p></div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
@@ -363,9 +383,7 @@ export function GlobeDiary() {
           ))}</div>
           {selected && <div className="selection-panel" key={selected.id}>
             <div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
-            {PRESETS.some((item) => item.city === selected.city)
-              ? <div className="boundary-status"><i /><span>边界已高亮</span><small>金色实线为 {selected.city} 的行政边界</small></div>
-              : <div className="boundary-status"><i /><span>位置已标记</span><small>自定义地点显示为坐标点</small></div>}
+            <div className="boundary-status"><i /><span>城市已选中</span><small>蓝色填充为 {selected.city} 的行政区域</small></div>
             <PhotoStack key={selected.id} footprint={selected} />
           </div>}
         </aside>
@@ -374,19 +392,13 @@ export function GlobeDiary() {
       {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setFormOpen(false); }}>
         <form className="location-form" onSubmit={submit}>
           <div className="form-heading"><div><p className="eyebrow">NEW PLACE</p><h2>添加地点 / 照片</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="关闭">×</button></div>
-          <label>地点<select value={presetKey} onChange={(event) => setPresetKey(event.target.value)}>{PRESETS.map((item) => <option value={item.key} key={item.key}>{item.city} · {item.country}</option>)}<option value="custom">自定义地点</option></select></label>
-          {presetKey === "custom" && <div className="custom-grid">
-            <label>城市<input value={customPlace.city} required onChange={(event) => setCustomPlace({ ...customPlace, city: event.target.value })} /></label>
-            <label>国家或地区<input value={customPlace.country} required onChange={(event) => setCustomPlace({ ...customPlace, country: event.target.value })} /></label>
-            <label>纬度<input type="number" min="-90" max="90" step="any" value={customPlace.latitude} required onChange={(event) => setCustomPlace({ ...customPlace, latitude: event.target.value })} /></label>
-            <label>经度<input type="number" min="-180" max="180" step="any" value={customPlace.longitude} required onChange={(event) => setCustomPlace({ ...customPlace, longitude: event.target.value })} /></label>
-            <p>经纬度可以从手机地图的地点详情中复制</p>
-          </div>}
+          <label>城市名称<input value={cityName} required placeholder="例如：深圳" autoComplete="off" onChange={(event) => setCityName(event.target.value)} /></label>
+          <p className="city-lookup-note">保存时会自动识别国家、位置和城市行政边界</p>
           <label>日期（可选）<input type="date" value={visitedAt} onChange={(event) => setVisitedAt(event.target.value)} /></label>
           <label>照片（最多五张）<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event) => { const next = Array.from(event.target.files ?? []).slice(0, 5); setFiles(next); setNotice((event.target.files?.length ?? 0) > 5 ? "只会保留前五张照片" : ""); }} /></label>
           {files.length > 0 && <div className="file-list">{files.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}</div>}
           {notice && <p className="form-notice">{notice}</p>}
-          <button className="submit-button" type="submit" disabled={busy}>{busy ? "保存中…" : "保存地点"}</button>
+          <button className="submit-button" type="submit" disabled={busy}>{busy ? "正在查找城市边界…" : "保存地点"}</button>
         </form>
       </div>}
     </main>

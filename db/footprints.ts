@@ -14,10 +14,13 @@ export type FootprintRow = {
   country: string;
   latitude: number;
   longitude: number;
+  boundary: { type: "Polygon" | "MultiPolygon"; coordinates: unknown } | null;
   visitedAt: string;
   createdAt: string;
   photos: Array<{ id: number; url: string; contentType: string; sortOrder: number }>;
 };
+
+type StoredFootprintRow = Omit<FootprintRow, "boundary" | "photos"> & { boundaryGeoJson: string };
 
 const SEED_PLACES = [
   ["新加坡", "新加坡", 1.3521, 103.8198],
@@ -40,6 +43,18 @@ function getMedia() {
   return media;
 }
 
+function parseBoundary(value: string) {
+  if (!value) return null;
+  try {
+    const geometry = JSON.parse(value) as { type?: string; coordinates?: unknown };
+    return geometry.type === "Polygon" || geometry.type === "MultiPolygon"
+      ? geometry as { type: "Polygon" | "MultiPolygon"; coordinates: unknown }
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export async function ensureFootprintsTable() {
   const db = getD1();
   await db.batch([
@@ -49,6 +64,7 @@ export async function ensureFootprintsTable() {
       country TEXT NOT NULL,
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
+      boundary_geojson TEXT NOT NULL DEFAULT '',
       visited_at TEXT NOT NULL,
       memory TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
@@ -64,6 +80,10 @@ export async function ensureFootprintsTable() {
     )`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_footprint_photos_footprint_id ON footprint_photos(footprint_id)`),
   ]);
+  const footprintColumns = await db.prepare("PRAGMA table_info(footprints)").all<{ name: string }>();
+  if (!footprintColumns.results.some((column) => column.name === "boundary_geojson")) {
+    await db.prepare("ALTER TABLE footprints ADD COLUMN boundary_geojson TEXT NOT NULL DEFAULT ''").run();
+  }
   await db.batch(SEED_PLACES.map(([city, country, latitude, longitude]) => db.prepare(`
     INSERT INTO footprints (city, country, latitude, longitude, visited_at, memory)
     SELECT ?, ?, ?, ?, '', ''
@@ -75,10 +95,11 @@ export async function listFootprints(): Promise<FootprintRow[]> {
   const db = getD1();
   const footprints = await db.prepare(`SELECT
     id, city, country, latitude, longitude,
+    boundary_geojson AS boundaryGeoJson,
     visited_at AS visitedAt, created_at AS createdAt
     FROM footprints
     ORDER BY CASE WHEN visited_at = '' THEN 1 ELSE 0 END, visited_at DESC, id ASC
-  `).all<Omit<FootprintRow, "photos">>();
+  `).all<StoredFootprintRow>();
   const photos = await db.prepare(`SELECT id, footprint_id AS footprintId, object_key AS objectKey,
     content_type AS contentType, sort_order AS sortOrder
     FROM footprint_photos ORDER BY footprint_id, sort_order, id
@@ -89,30 +110,46 @@ export async function listFootprints(): Promise<FootprintRow[]> {
     list.push({ id: photo.id, url: `/api/photos/${photo.id}`, contentType: photo.contentType, sortOrder: photo.sortOrder });
     grouped.set(photo.footprintId, list);
   }
-  return footprints.results.map((item) => ({ ...item, photos: grouped.get(item.id) ?? [] }));
+  return footprints.results.map(({ boundaryGeoJson, ...item }) => ({
+    ...item,
+    boundary: parseBoundary(boundaryGeoJson),
+    photos: grouped.get(item.id) ?? [],
+  }));
+}
+
+export async function findFootprintLocation(city: string) {
+  return getD1().prepare(`SELECT city, country, latitude, longitude,
+    boundary_geojson AS boundaryGeoJson
+    FROM footprints WHERE lower(city) = lower(?) ORDER BY id LIMIT 1
+  `).bind(city).first<Pick<StoredFootprintRow, "city" | "country" | "latitude" | "longitude" | "boundaryGeoJson">>();
 }
 
 export async function createFootprint(input: {
-  city: string; country: string; latitude: number; longitude: number; visitedAt: string;
+  city: string; country: string; latitude: number; longitude: number; boundaryGeoJson: string; visitedAt: string;
 }) {
   const db = getD1();
   const existing = await db.prepare(`SELECT id, city, country, latitude, longitude,
+    boundary_geojson AS boundaryGeoJson,
     visited_at AS visitedAt, created_at AS createdAt
     FROM footprints WHERE city = ? AND country = ? ORDER BY id LIMIT 1
-  `).bind(input.city, input.country).first<Omit<FootprintRow, "photos">>();
+  `).bind(input.city, input.country).first<StoredFootprintRow>();
   if (existing) {
-    if (input.visitedAt && input.visitedAt !== existing.visitedAt) {
-      await db.prepare("UPDATE footprints SET visited_at = ? WHERE id = ?").bind(input.visitedAt, existing.id).run();
-      existing.visitedAt = input.visitedAt;
-    }
+    const nextVisitedAt = input.visitedAt || existing.visitedAt;
+    await db.prepare(`UPDATE footprints SET latitude = ?, longitude = ?, boundary_geojson = ?, visited_at = ? WHERE id = ?`)
+      .bind(input.latitude, input.longitude, input.boundaryGeoJson, nextVisitedAt, existing.id).run();
+    existing.latitude = input.latitude;
+    existing.longitude = input.longitude;
+    existing.boundaryGeoJson = input.boundaryGeoJson;
+    existing.visitedAt = nextVisitedAt;
     return { footprint: existing, created: false };
   }
   const footprint = await db.prepare(`INSERT INTO footprints
-    (city, country, latitude, longitude, visited_at, memory)
-    VALUES (?, ?, ?, ?, ?, '')
+    (city, country, latitude, longitude, boundary_geojson, visited_at, memory)
+    VALUES (?, ?, ?, ?, ?, ?, '')
     RETURNING id, city, country, latitude, longitude,
+    boundary_geojson AS boundaryGeoJson,
     visited_at AS visitedAt, created_at AS createdAt
-  `).bind(input.city, input.country, input.latitude, input.longitude, input.visitedAt).first<Omit<FootprintRow, "photos">>();
+  `).bind(input.city, input.country, input.latitude, input.longitude, input.boundaryGeoJson, input.visitedAt).first<StoredFootprintRow>();
   return { footprint, created: true };
 }
 
