@@ -195,6 +195,17 @@ export async function getPhoto(id: number) {
   return object ? { photo, object } : null;
 }
 
+export async function deletePhoto(id: number) {
+  const db = getD1();
+  const photo = await db.prepare(`SELECT id, footprint_id AS footprintId, object_key AS objectKey,
+    content_type AS contentType, sort_order AS sortOrder FROM footprint_photos WHERE id = ?
+  `).bind(id).first<PhotoRow>();
+  if (!photo) return false;
+  await getMedia().delete(photo.objectKey);
+  await db.prepare("DELETE FROM footprint_photos WHERE id = ?").bind(id).run();
+  return true;
+}
+
 export async function deleteFootprint(id: number) {
   const db = getD1();
   const photos = await db.prepare("SELECT object_key AS objectKey FROM footprint_photos WHERE footprint_id = ?")

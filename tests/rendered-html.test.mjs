@@ -27,7 +27,11 @@ test("server-renders the restrained globe workspace", async () => {
 test("ships the cartographic globe, automatic city boundary, and photo-storage configuration", async () => {
   const [component, route, migration, hosting, boundaries, countries] = await Promise.all([
     readFile(new URL("../app/GlobeDiary.tsx", import.meta.url), "utf8"),
-    readFile(new URL("../app/api/footprints/route.ts", import.meta.url), "utf8"),
+    Promise.all([
+      readFile(new URL("../app/api/footprints/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../app/api/photos/[id]/route.ts", import.meta.url), "utf8"),
+      readFile(new URL("../db/footprints.ts", import.meta.url), "utf8"),
+    ]).then((files) => files.join("\n")),
     readFile(new URL("../drizzle/0002_curly_changeling.sql", import.meta.url), "utf8"),
     readFile(new URL("../.openai/hosting.json", import.meta.url), "utf8"),
     readFile(new URL("../public/visited-boundaries.json", import.meta.url), "utf8"),
@@ -49,6 +53,10 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /继续添加照片/);
   assert.match(component, /GlobeBackdrop/);
   assert.match(component, /atlas-fallback\.jpg/);
+  assert.match(component, /panel-collapsed/);
+  assert.match(component, /delete-photo-button/);
+  assert.match(route, /export async function DELETE/);
+  assert.match(route, /deletePhoto/);
   assert.equal(JSON.parse(hosting).r2, "MEDIA");
   assert.equal(JSON.parse(boundaries).features.length, 7);
   assert.ok(JSON.parse(countries).features.length > 150);

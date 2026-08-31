@@ -429,19 +429,29 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
   return <div className="globe-canvas" ref={mountRef} aria-label="可旋转的三维地球" />;
 }
 
-function PhotoStack({ footprint }: { footprint: Footprint }) {
+function PhotoStack({ footprint, deletingPhotoId, onDelete }: {
+  footprint: Footprint; deletingPhotoId: number | null; onDelete: (photo: Photo) => void;
+}) {
   const [active, setActive] = useState(footprint.photos[0] ?? null);
+  useEffect(() => {
+    setActive((current) => footprint.photos.find((photo) => photo.id === current?.id) ?? footprint.photos[0] ?? null);
+  }, [footprint.photos]);
   if (!footprint.photos.length) return <div className="photo-empty">这个地点还没有照片</div>;
   return (
     <div className="photo-viewer">
       <div className="photo-detail">{active && <img src={active.url} alt={`${footprint.city}的照片`} />}</div>
       <div className="photo-stack" aria-label={`${footprint.city}的照片`}>
         {footprint.photos.map((photo, index) => (
-          <button className={active?.id === photo.id ? "photo-card active" : "photo-card"} key={photo.id}
-            style={{ "--photo-index": index } as React.CSSProperties}
-            onMouseEnter={() => setActive(photo)} onFocus={() => setActive(photo)} onClick={() => setActive(photo)} type="button">
-            <img src={photo.url} alt={`${footprint.city}照片 ${index + 1}`} />
-          </button>
+          <div className="photo-card-wrap" key={photo.id} style={{ "--photo-index": index } as React.CSSProperties}>
+            <button className={active?.id === photo.id ? "photo-card active" : "photo-card"}
+              onMouseEnter={() => setActive(photo)} onFocus={() => setActive(photo)} onClick={() => setActive(photo)} type="button">
+              <img src={photo.url} alt={`${footprint.city}照片 ${index + 1}`} />
+            </button>
+            <button className="delete-photo-button" type="button" disabled={deletingPhotoId === photo.id}
+              onClick={() => onDelete(photo)} aria-label={`删除${footprint.city}照片 ${index + 1}`}>
+              {deletingPhotoId === photo.id ? "…" : "×"}
+            </button>
+          </div>
         ))}
       </div>
     </div>
@@ -482,11 +492,13 @@ export function GlobeDiary() {
   const [footprints, setFootprints] = useState<Footprint[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(true);
   const [formMode, setFormMode] = useState<"place" | "photos">("place");
   const [cityName, setCityName] = useState("");
   const [visitedAt, setVisitedAt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
+  const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null);
   const [notice, setNotice] = useState("");
 
   const selected = useMemo(() => footprints.find((item) => item.id === selectedId) ?? footprints[0] ?? null, [footprints, selectedId]);
@@ -528,13 +540,28 @@ export function GlobeDiary() {
     finally { setBusy(false); }
   };
 
+  const removePhoto = async (photo: Photo) => {
+    if (!selected || !window.confirm(`确定删除 ${selected.city} 的这张照片吗？`)) return;
+    setDeletingPhotoId(photo.id); setNotice("");
+    try {
+      const response = await fetch(`/api/photos/${photo.id}`, { method: "DELETE" });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "删除失败");
+      await load(selected.id);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "删除失败"); }
+    finally { setDeletingPhotoId(null); }
+  };
+
   return (
     <main className="site-shell">
       <header className="topbar"><p className="brand-wordmark">MAKE LOVE ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>添加地点 / 照片</button></header>
-      <section className="workspace">
+      <section className={panelOpen ? "workspace" : "workspace panel-collapsed"}>
         <div className="globe-stage">
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
           <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
+          <button className="panel-toggle" type="button" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen}>
+            <span>{panelOpen ? "收起侧栏" : "展开地点与照片"}</span><i>{panelOpen ? "›" : "‹"}</i>
+          </button>
           <p className="globe-hint">移入图钉预览紫色填充 · 点击切换城市照片 · 拖动旋转，滚轮放大</p>
         </div>
         <aside className="places-panel">
@@ -551,7 +578,7 @@ export function GlobeDiary() {
               <span>{selected.photos.length >= 5 ? "照片已满" : "继续添加照片"}</span>
               <small>{selected.photos.length} / 5</small>
             </button>
-            <PhotoStack key={selected.id} footprint={selected} />
+            <PhotoStack key={selected.id} footprint={selected} deletingPhotoId={deletingPhotoId} onDelete={removePhoto} />
           </div>}
         </aside>
       </section>
