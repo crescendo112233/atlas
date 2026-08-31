@@ -31,7 +31,7 @@ function cleanText(value: unknown, maxLength: number) {
 function errorResponse(error: unknown) {
   if (error instanceof RequestError) return Response.json({ error: error.message }, { status: error.status });
   console.error(error);
-  return Response.json({ error: "暂时没有保存成功，请稍后再试" }, { status: 500 });
+  return Response.json({ error: "Could not save your changes. Please try again." }, { status: 500 });
 }
 
 async function resolveCity(city: string) {
@@ -46,28 +46,28 @@ async function resolveCity(city: string) {
   try {
     response = await fetch(url, {
       headers: {
-        "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.5",
+        "Accept-Language": "en-US,en;q=0.9",
         "Referer": "https://our-planet-diary-sz-sg.quzheping112233.chatgpt.site/",
         "User-Agent": "OurPlanetDiary/1.0 (+https://our-planet-diary-sz-sg.quzheping112233.chatgpt.site)",
       },
     });
   } catch {
-    throw new RequestError("城市边界服务暂时不可用，请稍后再试", 503);
+    throw new RequestError("The city boundary service is temporarily unavailable. Please try again.", 503);
   }
-  if (!response.ok) throw new RequestError("城市边界服务暂时不可用，请稍后再试", 503);
+  if (!response.ok) throw new RequestError("The city boundary service is temporarily unavailable. Please try again.", 503);
   const results = await response.json() as CitySearchResult[];
   const result = results.find((item) => item.geojson?.type === "Polygon" || item.geojson?.type === "MultiPolygon");
   if (!result?.geojson || (result.geojson.type !== "Polygon" && result.geojson.type !== "MultiPolygon")) {
-    throw new RequestError("没有找到这个城市的行政边界，请试试更完整的城市名称", 404);
+    throw new RequestError("No administrative boundary was found. Try a more complete city name.", 404);
   }
   const latitude = Number(result.lat);
   const longitude = Number(result.lon);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
-    throw new RequestError("没有找到这个城市的准确位置", 404);
+    throw new RequestError("An accurate location could not be found for this city.", 404);
   }
   return {
     city,
-    country: result.address?.country ?? result.display_name.split(",").at(-1)?.trim() ?? "未知地区",
+    country: result.address?.country ?? result.display_name.split(",").at(-1)?.trim() ?? "Unknown region",
     latitude,
     longitude,
     boundaryGeoJson: JSON.stringify(result.geojson),
@@ -95,11 +95,11 @@ export async function POST(request: Request) {
     const supportedTypes = new Set(["image/jpeg", "image/png", "image/webp", "image/avif"]);
 
     if (!city || (visitedAt && !/^\d{4}-\d{2}-\d{2}$/.test(visitedAt))) {
-      return Response.json({ error: "请输入有效的城市名称" }, { status: 400 });
+      return Response.json({ error: "Enter a valid city name" }, { status: 400 });
     }
-    if (files.length > 50) return Response.json({ error: "每个地点最多上传五十张照片" }, { status: 400 });
+    if (files.length > 50) return Response.json({ error: "Each place can contain up to 50 photos" }, { status: 400 });
     if (files.some((file) => !supportedTypes.has(file.type) || file.size > 8 * 1024 * 1024)) {
-      return Response.json({ error: "仅支持 JPG、PNG、WebP、AVIF，且每张不超过 8MB" }, { status: 400 });
+      return Response.json({ error: "Use JPG, PNG, WebP or AVIF files up to 8 MB each" }, { status: 400 });
     }
 
     await ensureFootprintsTable();
@@ -107,11 +107,11 @@ export async function POST(request: Request) {
     const resolvedCity = cachedCity ?? await resolveCity(city);
     const result = await createFootprint({ ...resolvedCity, visitedAt });
     const footprint = result.footprint;
-    if (!footprint) throw new Error("地点保存失败");
+    if (!footprint) throw new Error("The place could not be saved");
     const existingPhotoCount = await countFootprintPhotos(footprint.id);
     if (existingPhotoCount + files.length > 50) {
       if (result.created) await deleteFootprint(footprint.id);
-      return Response.json({ error: `这个地点还能上传 ${50 - existingPhotoCount} 张照片` }, { status: 400 });
+      return Response.json({ error: `You can add ${50 - existingPhotoCount} more photos here` }, { status: 400 });
     }
     try {
       await storeFootprintPhotos(footprint.id, files);
@@ -129,7 +129,7 @@ export async function DELETE(request: Request) {
   try {
     const id = Number(new URL(request.url).searchParams.get("id"));
     if (!Number.isInteger(id) || id < 1) {
-      return Response.json({ error: "无效的足迹" }, { status: 400 });
+      return Response.json({ error: "Invalid place" }, { status: 400 });
     }
     await ensureFootprintsTable();
     await deleteFootprint(id);

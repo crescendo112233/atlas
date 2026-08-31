@@ -19,15 +19,15 @@ export async function GET(request: Request) {
 
 export async function DELETE(request: Request) {
   const id = Number(new URL(request.url).pathname.split("/").pop());
-  if (!Number.isInteger(id) || id < 1) return Response.json({ error: "无效的照片" }, { status: 400 });
+  if (!Number.isInteger(id) || id < 1) return Response.json({ error: "Invalid photo" }, { status: 400 });
   try {
     await ensureFootprintsTable();
     const deleted = await deletePhoto(id);
     return deleted
       ? Response.json({ ok: true })
-      : Response.json({ error: "没有找到这张照片" }, { status: 404 });
+      : Response.json({ error: "Photo not found" }, { status: 404 });
   } catch (error) {
     console.error(error);
-    return Response.json({ error: "照片删除失败，请稍后再试" }, { status: 500 });
+    return Response.json({ error: "The photo could not be deleted. Please try again." }, { status: 500 });
   }
 }

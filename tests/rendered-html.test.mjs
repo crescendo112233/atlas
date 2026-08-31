@@ -19,9 +19,8 @@ test("server-renders the restrained globe workspace", async () => {
   const html = await response.text();
   assert.match(html, /<title>TOOP &amp; PP&#x27;S ATLAS<\/title>/);
   assert.match(html, /TOOP &amp; PP&#x27;S ATLAS/);
-  assert.doesNotMatch(html, /PRIVATE ATLAS|<h1>我们的地球<\/h1>/);
-  assert.match(html, /添加地点 \/ 照片/);
-  assert.doesNotMatch(html, /悄悄话|粉色泡泡/);
+  assert.match(html, /ADD PLACE \/ PHOTOS/);
+  assert.doesNotMatch(html, /[\u3400-\u9fff]/);
 });
 
 test("ships the cartographic globe, automatic city boundary, and photo-storage configuration", async () => {
@@ -39,25 +38,25 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   ]);
   assert.doesNotMatch(component, /earth-blue-marble/);
   assert.match(component, /world-countries\.geojson/);
-  assert.match(component, /紫色填充/);
+  assert.match(component, /CITY SELECTED/);
   assert.match(component, /pinGeometry/);
   assert.match(component, /pointermove/);
   assert.match(component, /zoomToCursor = false/);
   assert.match(component, /controls\.rotateSpeed = THREE\.MathUtils\.lerp/);
   assert.match(component, /opacity: 0\.48/);
-  assert.match(component, /城市名称/);
-  assert.doesNotMatch(component, /国家或地区|纬度<input|经度<input/);
+  assert.match(component, /City name/);
+  assert.doesNotMatch(component, /Country or region|Latitude<input|Longitude<input/);
   assert.match(route, /polygon_geojson/);
   assert.match(migration, /boundary_geojson/);
   assert.match(component, /remainingPhotoSlots/);
   assert.match(component, /50 -/);
   assert.doesNotMatch(component, /globe-hint/);
-  assert.match(component, /继续添加照片/);
+  assert.match(component, /ADD MORE PHOTOS/);
   assert.match(component, /GlobeBackdrop/);
   assert.match(component, /atlas-fallback\.jpg/);
   assert.match(component, /panel-collapsed/);
   assert.match(component, /delete-photo-button/);
-  assert.match(component, /删除城市/);
+  assert.match(component, /DELETE CITY/);
   assert.match(component, /method: "DELETE"/);
   assert.match(route, /export async function DELETE/);
   assert.match(route, /deletePhoto/);

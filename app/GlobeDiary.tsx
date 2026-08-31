@@ -19,6 +19,12 @@ type BoundaryFeature = {
 };
 
 const SEEDED_CITIES = new Set(["新加坡", "重庆", "成都", "曼谷", "函馆", "小樽", "札幌"]);
+const ENGLISH_PLACE_NAMES: Record<string, string> = {
+  新加坡: "Singapore", 重庆: "Chongqing", 成都: "Chengdu", 曼谷: "Bangkok",
+  函馆: "Hakodate", 小樽: "Otaru", 札幌: "Sapporo", 中国: "China",
+  泰国: "Thailand", 日本: "Japan",
+};
+const displayPlaceName = (value: string) => ENGLISH_PLACE_NAMES[value] ?? value;
 
 function globePoint(latitude: number, longitude: number, radius = 1) {
   const phi = THREE.MathUtils.degToRad(90 - latitude);
@@ -426,7 +432,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     };
   }, [footprints]);
 
-  return <div className="globe-canvas" ref={mountRef} aria-label="可旋转的三维地球" />;
+  return <div className="globe-canvas" ref={mountRef} aria-label="Interactive 3D globe" />;
 }
 
 function PhotoStack({ footprint, deletingPhotoId, onDelete }: {
@@ -436,19 +442,20 @@ function PhotoStack({ footprint, deletingPhotoId, onDelete }: {
   useEffect(() => {
     setActive((current) => footprint.photos.find((photo) => photo.id === current?.id) ?? footprint.photos[0] ?? null);
   }, [footprint.photos]);
-  if (!footprint.photos.length) return <div className="photo-empty">这个地点还没有照片</div>;
+  if (!footprint.photos.length) return <div className="photo-empty">No photos here yet</div>;
+  const cityLabel = displayPlaceName(footprint.city);
   return (
     <div className="photo-viewer">
-      <div className="photo-detail">{active && <img src={active.url} alt={`${footprint.city}的照片`} />}</div>
-      <div className="photo-stack" aria-label={`${footprint.city}的照片`}>
+      <div className="photo-detail">{active && <img src={active.url} alt={`A memory from ${cityLabel}`} />}</div>
+      <div className="photo-stack" aria-label={`${cityLabel} photo collection`}>
         {footprint.photos.map((photo, index) => (
           <div className="photo-card-wrap" key={photo.id} style={{ "--photo-index": index } as React.CSSProperties}>
             <button className={active?.id === photo.id ? "photo-card active" : "photo-card"}
               onMouseEnter={() => setActive(photo)} onFocus={() => setActive(photo)} onClick={() => setActive(photo)} type="button">
-              <img src={photo.url} alt={`${footprint.city}照片 ${index + 1}`} />
+              <img src={photo.url} alt={`${cityLabel} photo ${index + 1}`} />
             </button>
             <button className="delete-photo-button" type="button" disabled={deletingPhotoId === photo.id}
-              onClick={() => onDelete(photo)} aria-label={`删除${footprint.city}照片 ${index + 1}`}>
+              onClick={() => onDelete(photo)} aria-label={`Delete ${cityLabel} photo ${index + 1}`}>
               {deletingPhotoId === photo.id ? "…" : "×"}
             </button>
           </div>
@@ -514,7 +521,7 @@ export function GlobeDiary() {
   const load = async (selectId?: number) => {
     const response = await fetch("/api/footprints", { cache: "no-store" });
     const data = await response.json() as { footprints?: Footprint[]; error?: string };
-    if (!response.ok) throw new Error(data.error ?? "读取失败");
+    if (!response.ok) throw new Error(data.error ?? "Could not load the atlas");
     const next = (data.footprints ?? []).map((item) => ({ ...item, photos: item.photos ?? [] }));
     setFootprints(next);
     setSelectedId((current) => {
@@ -523,14 +530,14 @@ export function GlobeDiary() {
     });
   };
   useEffect(() => {
-    const timer = window.setTimeout(() => { load().catch(() => setNotice("暂时无法读取地点")); }, 0);
+    const timer = window.setTimeout(() => { load().catch(() => setNotice("Places are temporarily unavailable")); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (formMode === "photos" && !files.length) return setNotice("请选择要补充的照片");
-    if (files.length > remainingPhotoSlots) return setNotice(`这个地点还能上传 ${remainingPhotoSlots} 张照片`);
+    if (formMode === "photos" && !files.length) return setNotice("Choose at least one photo to add");
+    if (files.length > remainingPhotoSlots) return setNotice(`You can add ${remainingPhotoSlots} more photos here`);
     setBusy(true); setNotice("");
     const body = new FormData();
     body.set("city", cityName);
@@ -538,66 +545,66 @@ export function GlobeDiary() {
     try {
       const response = await fetch("/api/footprints", { method: "POST", body });
       const data = await response.json() as { error?: string; footprint?: { id: number } };
-      if (!response.ok) throw new Error(data.error ?? "保存失败");
+      if (!response.ok) throw new Error(data.error ?? "Could not save this place");
       await load(data.footprint?.id); setFormOpen(false); setFiles([]); setVisitedAt(""); setCityName(""); setNotice("");
-    } catch (error) { setNotice(error instanceof Error ? error.message : "保存失败"); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not save this place"); }
     finally { setBusy(false); }
   };
 
   const removePhoto = async (photo: Photo) => {
-    if (!selected || !window.confirm(`确定删除 ${selected.city} 的这张照片吗？`)) return;
+    if (!selected || !window.confirm(`Delete this photo from ${displayPlaceName(selected.city)}?`)) return;
     setDeletingPhotoId(photo.id); setNotice("");
     try {
       const response = await fetch(`/api/photos/${photo.id}`, { method: "DELETE" });
       const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "删除失败");
+      if (!response.ok) throw new Error(data.error ?? "Could not delete this photo");
       await load(selected.id);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "删除失败"); }
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not delete this photo"); }
     finally { setDeletingPhotoId(null); }
   };
 
   const removeCity = async () => {
-    if (!selected || !window.confirm(`确定删除 ${selected.city} 吗？这个城市的全部照片也会被永久删除。`)) return;
-    const city = selected.city;
+    if (!selected || !window.confirm(`Delete ${displayPlaceName(selected.city)}? Every photo saved here will also be permanently deleted.`)) return;
+    const city = displayPlaceName(selected.city);
     setDeletingCity(true); setNotice("");
     try {
       const response = await fetch(`/api/footprints?id=${selected.id}`, { method: "DELETE" });
       const data = await response.json() as { error?: string };
-      if (!response.ok) throw new Error(data.error ?? "删除失败");
+      if (!response.ok) throw new Error(data.error ?? "Could not delete this city");
       await load();
-      setNotice(`已删除 ${city}`);
-    } catch (error) { setNotice(error instanceof Error ? error.message : "删除失败"); }
+      setNotice(`${city} was deleted`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "Could not delete this city"); }
     finally { setDeletingCity(false); }
   };
 
   return (
     <main className="site-shell">
-      <header className="topbar"><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>添加地点 / 照片</button></header>
+      <header className="topbar"><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>ADD PLACE / PHOTOS</button></header>
       <section className={panelOpen ? "workspace" : "workspace panel-collapsed"}>
         <div className="globe-stage">
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
           <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           <button className="panel-toggle" type="button" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen}>
-            <span>{panelOpen ? "收起侧栏" : "展开地点与照片"}</span><i>{panelOpen ? "›" : "‹"}</i>
+            <span>{panelOpen ? "HIDE SIDEBAR" : "SHOW PLACES & PHOTOS"}</span><i>{panelOpen ? "›" : "‹"}</i>
           </button>
         </div>
         <aside className="places-panel">
-          <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
+          <div className="panel-heading"><span>RECORDED PLACES</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
             <button className={selected?.id === item.id ? "place-row active" : "place-row"} key={item.id} onClick={() => setSelectedId(item.id)} type="button">
-              <span className="place-dot" /><span><b>{item.city}</b><small>{item.country}</small></span><span className="place-count">{item.photos.length || "—"}</span>
+              <span className="place-dot" /><span><b>{displayPlaceName(item.city)}</b><small>{displayPlaceName(item.country)}</small></span><span className="place-count">{item.photos.length || "—"}</span>
             </button>
           ))}</div>
           {selected && <div className="selection-panel" key={selected.id}>
-            <div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
-            <div className="boundary-status"><i /><span>城市已选中</span><small>紫色填充为 {selected.city} 的行政区域</small></div>
+            <div className="selection-title"><div><span>{displayPlaceName(selected.country)}</span><h2>{displayPlaceName(selected.city)}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
+            <div className="boundary-status"><i /><span>CITY SELECTED</span><small>{displayPlaceName(selected.city)} boundary highlighted</small></div>
             <div className="city-actions">
               <button className="add-photos-button" type="button" onClick={openPhotoForm} disabled={selected.photos.length >= 50 || deletingCity}>
-                <span>{selected.photos.length >= 50 ? "照片已满" : "继续添加照片"}</span>
+                <span>{selected.photos.length >= 50 ? "PHOTO LIMIT REACHED" : "ADD MORE PHOTOS"}</span>
                 <small>{selected.photos.length} / 50</small>
               </button>
               <button className="delete-city-button" type="button" onClick={removeCity} disabled={deletingCity}>
-                {deletingCity ? "正在删除…" : "删除城市"}
+                {deletingCity ? "DELETING…" : "DELETE CITY"}
               </button>
             </div>
             {notice && !formOpen && <p className="action-notice">{notice}</p>}
@@ -605,16 +612,16 @@ export function GlobeDiary() {
           </div>}
         </aside>
       </section>
-      <footer>世界地图：Natural Earth · 城市边界：© OpenStreetMap contributors</footer>
+      <footer>World map: Natural Earth · City boundaries: © OpenStreetMap contributors</footer>
       {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setFormOpen(false); }}>
         <form className="location-form" onSubmit={submit}>
-          <div className="form-heading"><div><p className="eyebrow">{formMode === "photos" ? "ADD PHOTOS" : "NEW PLACE"}</p><h2>{formMode === "photos" ? `补充 ${selected?.city ?? "城市"} 的照片` : "添加地点 / 照片"}</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="关闭">×</button></div>
-          <label>城市名称<input value={cityName} required readOnly={formMode === "photos"} placeholder="例如：深圳" autoComplete="off" onChange={(event) => setCityName(event.target.value)} /></label>
-          {formMode === "place" && <><p className="city-lookup-note">保存时会自动识别国家、位置和城市行政边界</p><label>日期（可选）<input type="date" value={visitedAt} onChange={(event) => setVisitedAt(event.target.value)} /></label></>}
-          <label>照片（还可添加 {remainingPhotoSlots} 张）<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event) => { const chosen = Array.from(event.target.files ?? []); const next = chosen.slice(0, remainingPhotoSlots); setFiles(next); setNotice(chosen.length > remainingPhotoSlots ? `只会保留前 ${remainingPhotoSlots} 张照片` : ""); }} /></label>
+          <div className="form-heading"><div><p className="eyebrow">{formMode === "photos" ? "ADD PHOTOS" : "NEW PLACE"}</p><h2>{formMode === "photos" ? `Add memories from ${displayPlaceName(selected?.city ?? "this city")}` : "Add a place / photos"}</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="Close">×</button></div>
+          <label>City name<input value={cityName} required readOnly={formMode === "photos"} placeholder="e.g. Shenzhen" autoComplete="off" onChange={(event) => setCityName(event.target.value)} /></label>
+          {formMode === "place" && <><p className="city-lookup-note">Country, location and city boundaries are found automatically when you save</p><label>Date (optional)<input type="date" value={visitedAt} onChange={(event) => setVisitedAt(event.target.value)} /></label></>}
+          <label>Photos ({remainingPhotoSlots} slots left)<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event) => { const chosen = Array.from(event.target.files ?? []); const next = chosen.slice(0, remainingPhotoSlots); setFiles(next); setNotice(chosen.length > remainingPhotoSlots ? `Only the first ${remainingPhotoSlots} photos will be kept` : ""); }} /></label>
           {files.length > 0 && <div className="file-list">{files.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}</div>}
           {notice && <p className="form-notice">{notice}</p>}
-          <button className="submit-button" type="submit" disabled={busy}>{busy ? "正在保存…" : formMode === "photos" ? "添加到照片集" : "保存地点"}</button>
+          <button className="submit-button" type="submit" disabled={busy}>{busy ? "SAVING…" : formMode === "photos" ? "ADD TO COLLECTION" : "SAVE PLACE"}</button>
         </form>
       </div>}
     </main>

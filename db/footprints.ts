@@ -33,13 +33,13 @@ const SEED_PLACES = [
 ] as const;
 
 function getD1() {
-  if (!env.DB) throw new Error("地点数据库暂时不可用");
+  if (!env.DB) throw new Error("The place database is temporarily unavailable");
   return env.DB;
 }
 
 function getMedia() {
   const media = (env as typeof env & { MEDIA?: R2Bucket }).MEDIA;
-  if (!media) throw new Error("照片存储暂时不可用");
+  if (!media) throw new Error("Photo storage is temporarily unavailable");
   return media;
 }
 
