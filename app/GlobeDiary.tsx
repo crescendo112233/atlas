@@ -615,8 +615,10 @@ export function GlobeDiary() {
         <button className="add-button" type="button" onClick={openPlaceForm}>ADD PLACE / PHOTOS</button>
       </header>
       <section className={`workspace${panelOpen ? "" : " panel-collapsed"}${globeExpanded ? " globe-expanded" : " globe-compact"}`}>
-        <div className="globe-stage">
+        <div className="atlas-backdrop-frame">
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
+        </div>
+        <div className="globe-stage">
           <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
           {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => setGlobeExpanded(true)} aria-label="Expand globe"><span>EXPAND GLOBE</span></button>}
           {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => setGlobeExpanded(false)}><i>−</i><span>ZOOM OUT</span></button>}
