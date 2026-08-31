@@ -467,8 +467,8 @@ function PhotoStack({ footprint, deletingPhotoId, onDelete }: {
 
 function GlobeBackdrop({ footprint }: { footprint: Footprint | null }) {
   const photos = footprint?.photos.length
-    ? footprint.photos.map((photo) => ({ key: String(photo.id), url: photo.url }))
-    : [{ key: "fallback", url: "/atlas-fallback.jpg" }];
+    ? footprint.photos.map((photo) => ({ key: String(photo.id), url: photo.url, isFallback: false }))
+    : [{ key: "fallback", url: "/atlas-fallback.jpg", isFallback: true }];
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
@@ -484,7 +484,7 @@ function GlobeBackdrop({ footprint }: { footprint: Footprint | null }) {
     <div className="globe-backdrop" aria-hidden="true">
       {photos.map((photo, index) => (
         <img
-          className={index === activeIndex ? "active" : ""}
+          className={`${index === activeIndex ? "active" : ""}${photo.isFallback ? " fallback" : ""}`}
           key={`${footprint?.id ?? "fallback"}-${photo.key}`}
           src={photo.url}
           alt=""

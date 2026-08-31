@@ -84,7 +84,9 @@ button { color: inherit; }
 .globe-stage { min-width: 0; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(35deg, rgba(13, 79, 151, .14), rgba(39, 22, 80, .15) 56%, rgba(112, 44, 161, .16)); box-shadow: inset 0 1px rgba(255, 255, 255, .035), 0 18px 45px rgba(7, 3, 15, .16); }
 .globe-backdrop { position: absolute; inset: 0; overflow: hidden; background: #0d0816; }
 .globe-backdrop > img { position: absolute; inset: -3%; width: 106%; height: 106%; object-fit: cover; opacity: 0; transform: scale(1.02); filter: brightness(1.1) saturate(1.04) contrast(1.02); transition: opacity 1.55s ease; }
+.globe-backdrop > img.fallback { object-position: center 48%; filter: brightness(1.2) saturate(1.08) contrast(.98); }
 .globe-backdrop > img.active { opacity: .78; animation: backdrop-ken-burns 7.2s ease-out both; }
+.globe-backdrop > img.active.fallback { opacity: .84; }
 .globe-backdrop-shade { position: absolute; inset: 0; background: radial-gradient(circle at 48% 46%, rgba(26, 13, 46, .06) 0 25%, rgba(13, 7, 24, .29) 70%, rgba(9, 5, 17, .52) 100%), linear-gradient(135deg, rgba(66, 38, 103, .09), rgba(7, 4, 13, .2)); backdrop-filter: blur(.6px); }
 .globe-stage::before {
   content: "";

@@ -56,6 +56,7 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /ADD MORE PHOTOS/);
   assert.match(component, /GlobeBackdrop/);
   assert.match(component, /atlas-fallback\.jpg/);
+  assert.match(component, /isFallback/);
   assert.match(component, /panel-collapsed/);
   assert.match(component, /delete-photo-button/);
   assert.match(component, /DELETE CITY/);
