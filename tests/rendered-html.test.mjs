@@ -57,6 +57,8 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /atlas-fallback\.jpg/);
   assert.match(component, /panel-collapsed/);
   assert.match(component, /delete-photo-button/);
+  assert.match(component, /删除城市/);
+  assert.match(component, /method: "DELETE"/);
   assert.match(route, /export async function DELETE/);
   assert.match(route, /deletePhoto/);
   assert.equal(JSON.parse(hosting).r2, "MEDIA");

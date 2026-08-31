@@ -79,16 +79,28 @@ export async function ensureFootprintsTable() {
       created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`),
     db.prepare(`CREATE INDEX IF NOT EXISTS idx_footprint_photos_footprint_id ON footprint_photos(footprint_id)`),
+    db.prepare(`CREATE TABLE IF NOT EXISTS app_metadata (
+      key TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )`),
   ]);
   const footprintColumns = await db.prepare("PRAGMA table_info(footprints)").all<{ name: string }>();
   if (!footprintColumns.results.some((column) => column.name === "boundary_geojson")) {
     await db.prepare("ALTER TABLE footprints ADD COLUMN boundary_geojson TEXT NOT NULL DEFAULT ''").run();
   }
-  await db.batch(SEED_PLACES.map(([city, country, latitude, longitude]) => db.prepare(`
-    INSERT INTO footprints (city, country, latitude, longitude, visited_at, memory)
-    SELECT ?, ?, ?, ?, '', ''
-    WHERE NOT EXISTS (SELECT 1 FROM footprints WHERE city = ? AND country = ?)
-  `).bind(city, country, latitude, longitude, city, country)));
+  const seedState = await db.prepare("SELECT value FROM app_metadata WHERE key = ?")
+    .bind("initial_seed_completed").first<{ value: string }>();
+  if (!seedState) {
+    await db.batch([
+      ...SEED_PLACES.map(([city, country, latitude, longitude]) => db.prepare(`
+        INSERT INTO footprints (city, country, latitude, longitude, visited_at, memory)
+        SELECT ?, ?, ?, ?, '', ''
+        WHERE NOT EXISTS (SELECT 1 FROM footprints WHERE city = ? AND country = ?)
+      `).bind(city, country, latitude, longitude, city, country)),
+      db.prepare("INSERT INTO app_metadata (key, value) VALUES (?, ?)")
+        .bind("initial_seed_completed", new Date().toISOString()),
+    ]);
+  }
 }
 
 export async function listFootprints(): Promise<FootprintRow[]> {

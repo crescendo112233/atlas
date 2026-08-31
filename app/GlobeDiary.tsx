@@ -499,6 +499,7 @@ export function GlobeDiary() {
   const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [deletingPhotoId, setDeletingPhotoId] = useState<number | null>(null);
+  const [deletingCity, setDeletingCity] = useState(false);
   const [notice, setNotice] = useState("");
 
   const selected = useMemo(() => footprints.find((item) => item.id === selectedId) ?? footprints[0] ?? null, [footprints, selectedId]);
@@ -516,7 +517,10 @@ export function GlobeDiary() {
     if (!response.ok) throw new Error(data.error ?? "读取失败");
     const next = (data.footprints ?? []).map((item) => ({ ...item, photos: item.photos ?? [] }));
     setFootprints(next);
-    setSelectedId((current) => selectId ?? current ?? next[0]?.id ?? null);
+    setSelectedId((current) => {
+      const candidate = selectId ?? current;
+      return candidate && next.some((item) => item.id === candidate) ? candidate : next[0]?.id ?? null;
+    });
   };
   useEffect(() => {
     const timer = window.setTimeout(() => { load().catch(() => setNotice("暂时无法读取地点")); }, 0);
@@ -552,6 +556,20 @@ export function GlobeDiary() {
     finally { setDeletingPhotoId(null); }
   };
 
+  const removeCity = async () => {
+    if (!selected || !window.confirm(`确定删除 ${selected.city} 吗？这个城市的全部照片也会被永久删除。`)) return;
+    const city = selected.city;
+    setDeletingCity(true); setNotice("");
+    try {
+      const response = await fetch(`/api/footprints?id=${selected.id}`, { method: "DELETE" });
+      const data = await response.json() as { error?: string };
+      if (!response.ok) throw new Error(data.error ?? "删除失败");
+      await load();
+      setNotice(`已删除 ${city}`);
+    } catch (error) { setNotice(error instanceof Error ? error.message : "删除失败"); }
+    finally { setDeletingCity(false); }
+  };
+
   return (
     <main className="site-shell">
       <header className="topbar"><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>添加地点 / 照片</button></header>
@@ -573,10 +591,16 @@ export function GlobeDiary() {
           {selected && <div className="selection-panel" key={selected.id}>
             <div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
             <div className="boundary-status"><i /><span>城市已选中</span><small>紫色填充为 {selected.city} 的行政区域</small></div>
-            <button className="add-photos-button" type="button" onClick={openPhotoForm} disabled={selected.photos.length >= 50}>
-              <span>{selected.photos.length >= 50 ? "照片已满" : "继续添加照片"}</span>
-              <small>{selected.photos.length} / 50</small>
-            </button>
+            <div className="city-actions">
+              <button className="add-photos-button" type="button" onClick={openPhotoForm} disabled={selected.photos.length >= 50 || deletingCity}>
+                <span>{selected.photos.length >= 50 ? "照片已满" : "继续添加照片"}</span>
+                <small>{selected.photos.length} / 50</small>
+              </button>
+              <button className="delete-city-button" type="button" onClick={removeCity} disabled={deletingCity}>
+                {deletingCity ? "正在删除…" : "删除城市"}
+              </button>
+            </div>
+            {notice && !formOpen && <p className="action-notice">{notice}</p>}
             <PhotoStack key={selected.id} footprint={selected} deletingPhotoId={deletingPhotoId} onDelete={removePhoto} />
           </div>}
         </aside>

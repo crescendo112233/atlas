@@ -29,3 +29,8 @@ export const footprintPhotos = sqliteTable(
   },
   (table) => [index("idx_footprint_photos_footprint_id").on(table.footprintId)],
 );
+
+export const appMetadata = sqliteTable("app_metadata", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+});
