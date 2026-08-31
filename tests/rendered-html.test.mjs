@@ -20,6 +20,8 @@ test("server-renders the restrained globe workspace", async () => {
   assert.match(html, /<title>TOOP &amp; PP&#x27;S ATLAS<\/title>/);
   assert.match(html, /TOOP &amp; PP&#x27;S ATLAS/);
   assert.match(html, /ADD PLACE \/ PHOTOS/);
+  assert.match(html, /tppp-logo\.png/);
+  assert.match(html, /TppP logo/);
   assert.doesNotMatch(html, /[\u3400-\u9fff]/);
 });
 

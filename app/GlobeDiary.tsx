@@ -579,7 +579,10 @@ export function GlobeDiary() {
 
   return (
     <main className="site-shell">
-      <header className="topbar"><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>ADD PLACE / PHOTOS</button></header>
+      <header className="topbar">
+        <div className="brand-lockup"><img className="brand-logo" src="/tppp-logo.png" alt="TppP logo" /><span className="brand-divider" /><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p></div>
+        <button className="add-button" type="button" onClick={openPlaceForm}>ADD PLACE / PHOTOS</button>
+      </header>
       <section className={panelOpen ? "workspace" : "workspace panel-collapsed"}>
         <div className="globe-stage">
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
