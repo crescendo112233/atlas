@@ -620,8 +620,8 @@ export function GlobeDiary() {
         </div>
         <div className="globe-stage">
           <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => setGlobeExpanded(true)} aria-label="Expand globe"><span>EXPAND GLOBE</span></button>}
-          {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => setGlobeExpanded(false)}><i>−</i><span>ZOOM OUT</span></button>}
+          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => setGlobeExpanded(true)} aria-label="Expand globe"><span>ZOOM</span></button>}
+          {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => setGlobeExpanded(false)} aria-label="Shrink globe"><i>−</i><span>ZOOM</span></button>}
         </div>
         <aside className="places-panel">
           <div className="panel-heading"><span>RECORDED PLACES</span><strong>{footprints.length}</strong></div>
