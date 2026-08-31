@@ -52,6 +52,8 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /1000 \/ 30/);
   assert.match(component, /visibilitychange/);
   assert.match(component, /globeExpanded/);
+  assert.match(component, /globeTransitioning/);
+  assert.match(component, /resizeGlobe/);
   assert.doesNotMatch(component, /EXPAND GLOBE|ZOOM OUT/);
   assert.match(component, />ZOOM<\/b>/);
   assert.match(component, /HIDE SIDEBAR/);

@@ -531,6 +531,8 @@ export function GlobeDiary() {
   const [formOpen, setFormOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
   const [globeExpanded, setGlobeExpanded] = useState(false);
+  const [globeTransitioning, setGlobeTransitioning] = useState(false);
+  const globeTransitionTimer = useRef<number | null>(null);
   const [formMode, setFormMode] = useState<"place" | "photos">("place");
   const [cityName, setCityName] = useState("");
   const [visitedAt, setVisitedAt] = useState("");
@@ -564,6 +566,19 @@ export function GlobeDiary() {
     const timer = window.setTimeout(() => { load().catch(() => setNotice("Places are temporarily unavailable")); }, 0);
     return () => window.clearTimeout(timer);
   }, []);
+  useEffect(() => () => {
+    if (globeTransitionTimer.current !== null) window.clearTimeout(globeTransitionTimer.current);
+  }, []);
+
+  const resizeGlobe = (expanded: boolean) => {
+    if (globeTransitionTimer.current !== null) window.clearTimeout(globeTransitionTimer.current);
+    setGlobeTransitioning(true);
+    setGlobeExpanded(expanded);
+    globeTransitionTimer.current = window.setTimeout(() => {
+      setGlobeTransitioning(false);
+      globeTransitionTimer.current = null;
+    }, 880);
+  };
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -614,14 +629,14 @@ export function GlobeDiary() {
         <div className="brand-lockup"><img className="brand-logo" src="/tppp-logo.png" alt="TppP logo" /><span className="brand-divider" /><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p></div>
         <button className="add-button" type="button" onClick={openPlaceForm}>ADD PLACE / PHOTOS</button>
       </header>
-      <section className={`workspace${panelOpen ? "" : " panel-collapsed"}${globeExpanded ? " globe-expanded" : " globe-compact"}`}>
+      <section className={`workspace${panelOpen ? "" : " panel-collapsed"}${globeExpanded ? " globe-expanded" : " globe-compact"}${globeTransitioning ? " globe-is-transitioning" : ""}`}>
         <div className="atlas-backdrop-frame">
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
         </div>
         <div className="globe-stage">
           <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => setGlobeExpanded(true)} aria-label="Expand globe"><span><i>+</i><b>ZOOM</b></span></button>}
-          {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => setGlobeExpanded(false)} aria-label="Shrink globe"><i>−</i><span>ZOOM</span></button>}
+          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => resizeGlobe(true)} aria-label="Expand globe"><span><i>+</i><b>ZOOM</b></span></button>}
+          {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => resizeGlobe(false)} aria-label="Shrink globe"><i>−</i><span>ZOOM</span></button>}
         </div>
         <aside className="places-panel">
           <div className="panel-heading"><span>RECORDED PLACES</span><strong>{footprints.length}</strong></div>
