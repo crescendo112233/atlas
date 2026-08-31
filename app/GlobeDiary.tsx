@@ -115,9 +115,11 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const earthMaterial = new THREE.MeshStandardMaterial({
       color: 0x2b1d47,
       emissive: 0x10091f,
-      emissiveIntensity: 0.62,
-      roughness: 0.88,
-      metalness: 0.08,
+      emissiveIntensity: 0.44,
+      roughness: 0.72,
+      metalness: 0.12,
+      transparent: true,
+      opacity: 0.48,
     });
     const earth = new THREE.Mesh(
       new THREE.SphereGeometry(1, 128, 96),

@@ -40,6 +40,7 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /pointermove/);
   assert.match(component, /zoomToCursor = false/);
   assert.match(component, /controls\.rotateSpeed = THREE\.MathUtils\.lerp/);
+  assert.match(component, /opacity: 0\.48/);
   assert.match(component, /城市名称/);
   assert.doesNotMatch(component, /国家或地区|纬度<input|经度<input/);
   assert.match(route, /polygon_geojson/);
