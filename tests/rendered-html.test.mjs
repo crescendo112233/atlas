@@ -17,8 +17,8 @@ test("server-renders the restrained globe workspace", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /<title>MAKE LOVE ATLAS<\/title>/);
-  assert.match(html, /MAKE LOVE ATLAS/);
+  assert.match(html, /<title>TOOP &amp; PP&#x27;S ATLAS<\/title>/);
+  assert.match(html, /TOOP &amp; PP&#x27;S ATLAS/);
   assert.doesNotMatch(html, /PRIVATE ATLAS|<h1>我们的地球<\/h1>/);
   assert.match(html, /添加地点 \/ 照片/);
   assert.doesNotMatch(html, /悄悄话|粉色泡泡/);
@@ -50,6 +50,8 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(route, /polygon_geojson/);
   assert.match(migration, /boundary_geojson/);
   assert.match(component, /remainingPhotoSlots/);
+  assert.match(component, /50 -/);
+  assert.doesNotMatch(component, /globe-hint/);
   assert.match(component, /继续添加照片/);
   assert.match(component, /GlobeBackdrop/);
   assert.match(component, /atlas-fallback\.jpg/);

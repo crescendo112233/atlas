@@ -502,12 +502,12 @@ export function GlobeDiary() {
   const [notice, setNotice] = useState("");
 
   const selected = useMemo(() => footprints.find((item) => item.id === selectedId) ?? footprints[0] ?? null, [footprints, selectedId]);
-  const remainingPhotoSlots = Math.max(0, 5 - (formMode === "photos" ? selected?.photos.length ?? 0 : 0));
+  const remainingPhotoSlots = Math.max(0, 50 - (formMode === "photos" ? selected?.photos.length ?? 0 : 0));
   const openPlaceForm = () => {
     setFormMode("place"); setCityName(""); setVisitedAt(""); setFiles([]); setNotice(""); setFormOpen(true);
   };
   const openPhotoForm = () => {
-    if (!selected || selected.photos.length >= 5) return;
+    if (!selected || selected.photos.length >= 50) return;
     setFormMode("photos"); setCityName(selected.city); setVisitedAt(""); setFiles([]); setNotice(""); setFormOpen(true);
   };
   const load = async (selectId?: number) => {
@@ -554,7 +554,7 @@ export function GlobeDiary() {
 
   return (
     <main className="site-shell">
-      <header className="topbar"><p className="brand-wordmark">MAKE LOVE ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>添加地点 / 照片</button></header>
+      <header className="topbar"><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>添加地点 / 照片</button></header>
       <section className={panelOpen ? "workspace" : "workspace panel-collapsed"}>
         <div className="globe-stage">
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
@@ -562,7 +562,6 @@ export function GlobeDiary() {
           <button className="panel-toggle" type="button" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen}>
             <span>{panelOpen ? "收起侧栏" : "展开地点与照片"}</span><i>{panelOpen ? "›" : "‹"}</i>
           </button>
-          <p className="globe-hint">移入图钉预览紫色填充 · 点击切换城市照片 · 拖动旋转，滚轮放大</p>
         </div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
@@ -574,9 +573,9 @@ export function GlobeDiary() {
           {selected && <div className="selection-panel" key={selected.id}>
             <div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
             <div className="boundary-status"><i /><span>城市已选中</span><small>紫色填充为 {selected.city} 的行政区域</small></div>
-            <button className="add-photos-button" type="button" onClick={openPhotoForm} disabled={selected.photos.length >= 5}>
-              <span>{selected.photos.length >= 5 ? "照片已满" : "继续添加照片"}</span>
-              <small>{selected.photos.length} / 5</small>
+            <button className="add-photos-button" type="button" onClick={openPhotoForm} disabled={selected.photos.length >= 50}>
+              <span>{selected.photos.length >= 50 ? "照片已满" : "继续添加照片"}</span>
+              <small>{selected.photos.length} / 50</small>
             </button>
             <PhotoStack key={selected.id} footprint={selected} deletingPhotoId={deletingPhotoId} onDelete={removePhoto} />
           </div>}

@@ -97,7 +97,7 @@ export async function POST(request: Request) {
     if (!city || (visitedAt && !/^\d{4}-\d{2}-\d{2}$/.test(visitedAt))) {
       return Response.json({ error: "请输入有效的城市名称" }, { status: 400 });
     }
-    if (files.length > 5) return Response.json({ error: "每个地点最多上传五张照片" }, { status: 400 });
+    if (files.length > 50) return Response.json({ error: "每个地点最多上传五十张照片" }, { status: 400 });
     if (files.some((file) => !supportedTypes.has(file.type) || file.size > 8 * 1024 * 1024)) {
       return Response.json({ error: "仅支持 JPG、PNG、WebP、AVIF，且每张不超过 8MB" }, { status: 400 });
     }
@@ -109,9 +109,9 @@ export async function POST(request: Request) {
     const footprint = result.footprint;
     if (!footprint) throw new Error("地点保存失败");
     const existingPhotoCount = await countFootprintPhotos(footprint.id);
-    if (existingPhotoCount + files.length > 5) {
+    if (existingPhotoCount + files.length > 50) {
       if (result.created) await deleteFootprint(footprint.id);
-      return Response.json({ error: `这个地点还能上传 ${5 - existingPhotoCount} 张照片` }, { status: 400 });
+      return Response.json({ error: `这个地点还能上传 ${50 - existingPhotoCount} 张照片` }, { status: 400 });
     }
     try {
       await storeFootprintPhotos(footprint.id, files);
