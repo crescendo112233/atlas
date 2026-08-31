@@ -620,7 +620,7 @@ export function GlobeDiary() {
         </div>
         <div className="globe-stage">
           <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => setGlobeExpanded(true)} aria-label="Expand globe"><span>ZOOM</span></button>}
+          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => setGlobeExpanded(true)} aria-label="Expand globe"><span><i>+</i><b>ZOOM</b></span></button>}
           {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => setGlobeExpanded(false)} aria-label="Shrink globe"><i>−</i><span>ZOOM</span></button>}
         </div>
         <aside className="places-panel">
@@ -647,7 +647,7 @@ export function GlobeDiary() {
           </div>}
         </aside>
         <button className="panel-toggle" type="button" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen} aria-label={panelOpen ? "Hide sidebar" : "Show sidebar"} title={panelOpen ? "Hide sidebar" : "Show sidebar"}>
-          <i>{panelOpen ? "›" : "‹"}</i>
+          <span>{panelOpen ? "HIDE SIDEBAR" : "SHOW SIDEBAR"}</span><i>{panelOpen ? "›" : "‹"}</i>
         </button>
       </section>
       <footer>World map: Natural Earth · City boundaries: © OpenStreetMap contributors</footer>

@@ -53,7 +53,8 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /visibilitychange/);
   assert.match(component, /globeExpanded/);
   assert.doesNotMatch(component, /EXPAND GLOBE|ZOOM OUT/);
-  assert.match(component, />ZOOM<\/span>/);
+  assert.match(component, />ZOOM<\/b>/);
+  assert.match(component, /HIDE SIDEBAR/);
   assert.match(component, /atlas-backdrop-frame/);
   assert.match(component, /aria-label=\{panelOpen \? "Hide sidebar"/);
   assert.match(component, /opacity: 0\.48/);
