@@ -446,10 +446,41 @@ function PhotoStack({ footprint }: { footprint: Footprint }) {
   );
 }
 
+function GlobeBackdrop({ footprint }: { footprint: Footprint | null }) {
+  const photos = footprint?.photos.length
+    ? footprint.photos.map((photo) => ({ key: String(photo.id), url: photo.url }))
+    : [{ key: "fallback", url: "/atlas-fallback.jpg" }];
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex(0);
+    if (photos.length < 2) return;
+    const timer = window.setInterval(() => {
+      setActiveIndex((current) => (current + 1) % photos.length);
+    }, 5600);
+    return () => window.clearInterval(timer);
+  }, [footprint?.id, photos.length]);
+
+  return (
+    <div className="globe-backdrop" aria-hidden="true">
+      {photos.map((photo, index) => (
+        <img
+          className={index === activeIndex ? "active" : ""}
+          key={`${footprint?.id ?? "fallback"}-${photo.key}`}
+          src={photo.url}
+          alt=""
+        />
+      ))}
+      <div className="globe-backdrop-shade" />
+    </div>
+  );
+}
+
 export function GlobeDiary() {
   const [footprints, setFootprints] = useState<Footprint[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
+  const [formMode, setFormMode] = useState<"place" | "photos">("place");
   const [cityName, setCityName] = useState("");
   const [visitedAt, setVisitedAt] = useState("");
   const [files, setFiles] = useState<File[]>([]);
@@ -457,6 +488,14 @@ export function GlobeDiary() {
   const [notice, setNotice] = useState("");
 
   const selected = useMemo(() => footprints.find((item) => item.id === selectedId) ?? footprints[0] ?? null, [footprints, selectedId]);
+  const remainingPhotoSlots = Math.max(0, 5 - (formMode === "photos" ? selected?.photos.length ?? 0 : 0));
+  const openPlaceForm = () => {
+    setFormMode("place"); setCityName(""); setVisitedAt(""); setFiles([]); setNotice(""); setFormOpen(true);
+  };
+  const openPhotoForm = () => {
+    if (!selected || selected.photos.length >= 5) return;
+    setFormMode("photos"); setCityName(selected.city); setVisitedAt(""); setFiles([]); setNotice(""); setFormOpen(true);
+  };
   const load = async (selectId?: number) => {
     const response = await fetch("/api/footprints", { cache: "no-store" });
     const data = await response.json() as { footprints?: Footprint[]; error?: string };
@@ -472,7 +511,8 @@ export function GlobeDiary() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (files.length > 5) return setNotice("每个地点最多上传五张照片");
+    if (formMode === "photos" && !files.length) return setNotice("请选择要补充的照片");
+    if (files.length > remainingPhotoSlots) return setNotice(`这个地点还能上传 ${remainingPhotoSlots} 张照片`);
     setBusy(true); setNotice("");
     const body = new FormData();
     body.set("city", cityName);
@@ -481,16 +521,20 @@ export function GlobeDiary() {
       const response = await fetch("/api/footprints", { method: "POST", body });
       const data = await response.json() as { error?: string; footprint?: { id: number } };
       if (!response.ok) throw new Error(data.error ?? "保存失败");
-      await load(data.footprint?.id); setFormOpen(false); setFiles([]); setVisitedAt(""); setCityName("");
+      await load(data.footprint?.id); setFormOpen(false); setFiles([]); setVisitedAt(""); setCityName(""); setNotice("");
     } catch (error) { setNotice(error instanceof Error ? error.message : "保存失败"); }
     finally { setBusy(false); }
   };
 
   return (
     <main className="site-shell">
-      <header className="topbar"><p className="brand-wordmark">MAKE LOVE ATLAS</p><button className="add-button" type="button" onClick={() => setFormOpen(true)}>添加地点 / 照片</button></header>
+      <header className="topbar"><p className="brand-wordmark">MAKE LOVE ATLAS</p><button className="add-button" type="button" onClick={openPlaceForm}>添加地点 / 照片</button></header>
       <section className="workspace">
-        <div className="globe-stage"><GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} /><p className="globe-hint">移入图钉预览紫色填充 · 点击保持选中 · 拖动旋转，滚轮放大</p></div>
+        <div className="globe-stage">
+          <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
+          <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
+          <p className="globe-hint">移入图钉预览紫色填充 · 点击切换城市照片 · 拖动旋转，滚轮放大</p>
+        </div>
         <aside className="places-panel">
           <div className="panel-heading"><span>已记录地点</span><strong>{footprints.length}</strong></div>
           <div className="places-list">{footprints.map((item) => (
@@ -501,6 +545,10 @@ export function GlobeDiary() {
           {selected && <div className="selection-panel" key={selected.id}>
             <div className="selection-title"><div><span>{selected.country}</span><h2>{selected.city}</h2></div>{selected.visitedAt && <time>{selected.visitedAt}</time>}</div>
             <div className="boundary-status"><i /><span>城市已选中</span><small>紫色填充为 {selected.city} 的行政区域</small></div>
+            <button className="add-photos-button" type="button" onClick={openPhotoForm} disabled={selected.photos.length >= 5}>
+              <span>{selected.photos.length >= 5 ? "照片已满" : "继续添加照片"}</span>
+              <small>{selected.photos.length} / 5</small>
+            </button>
             <PhotoStack key={selected.id} footprint={selected} />
           </div>}
         </aside>
@@ -508,14 +556,13 @@ export function GlobeDiary() {
       <footer>世界地图：Natural Earth · 城市边界：© OpenStreetMap contributors</footer>
       {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setFormOpen(false); }}>
         <form className="location-form" onSubmit={submit}>
-          <div className="form-heading"><div><p className="eyebrow">NEW PLACE</p><h2>添加地点 / 照片</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="关闭">×</button></div>
-          <label>城市名称<input value={cityName} required placeholder="例如：深圳" autoComplete="off" onChange={(event) => setCityName(event.target.value)} /></label>
-          <p className="city-lookup-note">保存时会自动识别国家、位置和城市行政边界</p>
-          <label>日期（可选）<input type="date" value={visitedAt} onChange={(event) => setVisitedAt(event.target.value)} /></label>
-          <label>照片（最多五张）<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event) => { const next = Array.from(event.target.files ?? []).slice(0, 5); setFiles(next); setNotice((event.target.files?.length ?? 0) > 5 ? "只会保留前五张照片" : ""); }} /></label>
+          <div className="form-heading"><div><p className="eyebrow">{formMode === "photos" ? "ADD PHOTOS" : "NEW PLACE"}</p><h2>{formMode === "photos" ? `补充 ${selected?.city ?? "城市"} 的照片` : "添加地点 / 照片"}</h2></div><button type="button" onClick={() => setFormOpen(false)} aria-label="关闭">×</button></div>
+          <label>城市名称<input value={cityName} required readOnly={formMode === "photos"} placeholder="例如：深圳" autoComplete="off" onChange={(event) => setCityName(event.target.value)} /></label>
+          {formMode === "place" && <><p className="city-lookup-note">保存时会自动识别国家、位置和城市行政边界</p><label>日期（可选）<input type="date" value={visitedAt} onChange={(event) => setVisitedAt(event.target.value)} /></label></>}
+          <label>照片（还可添加 {remainingPhotoSlots} 张）<input type="file" accept="image/jpeg,image/png,image/webp,image/avif" multiple onChange={(event) => { const chosen = Array.from(event.target.files ?? []); const next = chosen.slice(0, remainingPhotoSlots); setFiles(next); setNotice(chosen.length > remainingPhotoSlots ? `只会保留前 ${remainingPhotoSlots} 张照片` : ""); }} /></label>
           {files.length > 0 && <div className="file-list">{files.map((file) => <span key={`${file.name}-${file.size}`}>{file.name}</span>)}</div>}
           {notice && <p className="form-notice">{notice}</p>}
-          <button className="submit-button" type="submit" disabled={busy}>{busy ? "正在查找城市边界…" : "保存地点"}</button>
+          <button className="submit-button" type="submit" disabled={busy}>{busy ? "正在保存…" : formMode === "photos" ? "添加到照片集" : "保存地点"}</button>
         </form>
       </div>}
     </main>

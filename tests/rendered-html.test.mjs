@@ -44,7 +44,10 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.doesNotMatch(component, /国家或地区|纬度<input|经度<input/);
   assert.match(route, /polygon_geojson/);
   assert.match(migration, /boundary_geojson/);
-  assert.match(component, /最多五张/);
+  assert.match(component, /remainingPhotoSlots/);
+  assert.match(component, /继续添加照片/);
+  assert.match(component, /GlobeBackdrop/);
+  assert.match(component, /atlas-fallback\.jpg/);
   assert.equal(JSON.parse(hosting).r2, "MEDIA");
   assert.equal(JSON.parse(boundaries).features.length, 7);
   assert.ok(JSON.parse(countries).features.length > 150);

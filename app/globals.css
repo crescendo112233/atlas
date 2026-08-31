@@ -76,6 +76,10 @@ button { color: inherit; }
 
 .workspace { height: calc(100vh - 116px); min-height: 650px; padding: 12px; gap: 12px; position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 370px; }
 .globe-stage { min-width: 0; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: rgba(15, 8, 28, .2); box-shadow: inset 0 1px rgba(255, 255, 255, .025), 0 18px 45px rgba(7, 3, 15, .16); }
+.globe-backdrop { position: absolute; inset: 0; overflow: hidden; background: #0d0816; }
+.globe-backdrop > img { position: absolute; inset: -3%; width: 106%; height: 106%; object-fit: cover; opacity: 0; transform: scale(1.02); filter: saturate(.82) contrast(1.05); transition: opacity 1.55s ease; }
+.globe-backdrop > img.active { opacity: .58; animation: backdrop-ken-burns 7.2s ease-out both; }
+.globe-backdrop-shade { position: absolute; inset: 0; background: radial-gradient(circle at 48% 46%, rgba(26, 13, 46, .15) 0 22%, rgba(13, 7, 24, .52) 68%, rgba(9, 5, 17, .76) 100%), linear-gradient(135deg, rgba(66, 38, 103, .16), rgba(7, 4, 13, .38)); backdrop-filter: blur(1.2px); }
 .globe-stage::before {
   content: "";
   position: absolute;
@@ -145,6 +149,11 @@ button { color: inherit; }
 .boundary-status i { width: 7px; height: 7px; border-radius: 50%; background: var(--blue); box-shadow: 0 0 0 4px rgba(167, 139, 250, .1), 0 0 13px rgba(167, 139, 250, .34); animation: status-pulse 2.2s ease-in-out infinite; }
 .boundary-status span { color: var(--blue-soft); font-size: 10px; letter-spacing: .08em; }
 .boundary-status small { justify-self: end; color: var(--muted); font-size: 9px; }
+.add-photos-button { width: 100%; margin-top: 10px; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; border: 1px solid rgba(178, 145, 235, .24); border-radius: 12px; background: linear-gradient(110deg, rgba(153, 113, 220, .13), rgba(101, 68, 160, .06)); color: var(--blue-soft); cursor: pointer; transition: transform .2s ease, border-color .2s ease, background .2s ease, box-shadow .2s ease; }
+.add-photos-button:hover:not(:disabled) { transform: translateY(-1px); border-color: rgba(194, 166, 244, .5); background: linear-gradient(110deg, rgba(169, 130, 232, .2), rgba(120, 82, 185, .1)); box-shadow: 0 8px 22px rgba(8, 3, 16, .2); }
+.add-photos-button:active:not(:disabled) { transform: scale(.975); }
+.add-photos-button small { color: var(--muted); font-size: 9px; letter-spacing: .12em; }
+.add-photos-button:disabled { opacity: .45; cursor: default; }
 .photo-empty { margin-top: 20px; height: 152px; display: grid; place-items: center; border: 1px dashed rgba(171, 143, 225, .25); border-radius: 14px; color: var(--muted); background: radial-gradient(circle at 50% 15%, rgba(149, 111, 215, .08), transparent 58%); font-size: 10px; letter-spacing: .06em; }
 .photo-viewer { margin-top: 18px; animation: content-in .35s ease both; }
 .photo-detail { aspect-ratio: 4 / 3; overflow: hidden; background: #160d27; border: 1px solid rgba(185, 161, 226, .2); border-radius: 14px; box-shadow: 0 14px 35px rgba(8, 3, 16, .26); }
@@ -165,6 +174,7 @@ footer { height: 32px; padding: 0 36px; position: relative; z-index: 3; display:
 .location-form label { display: block; margin-top: 15px; color: var(--ink-soft); font-size: 11px; letter-spacing: .05em; }
 .location-form input, .location-form select { width: 100%; height: 42px; margin-top: 7px; padding: 0 11px; border: 1px solid rgba(187, 161, 228, .18); border-radius: 12px; outline: 0; background: rgba(15, 8, 27, .72); color: var(--ink); transition: border-color .2s ease, box-shadow .2s ease, transform .18s ease; }
 .location-form input:focus, .location-form select:focus { border-color: rgba(174, 142, 232, .62); box-shadow: 0 0 0 3px rgba(159, 122, 224, .1); }
+.location-form input:read-only { color: var(--muted); background: rgba(13, 7, 24, .48); cursor: default; }
 .location-form input[type="file"] { height: auto; padding: 11px; }
 .custom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 10px; }
 .custom-grid > p { grid-column: 1 / -1; margin: 8px 0 0; color: var(--muted); font-size: 10px; }
@@ -176,6 +186,7 @@ footer { height: 32px; padding: 0 36px; position: relative; z-index: 3; display:
 .submit-button:disabled { opacity: .5; cursor: wait; }
 
 @keyframes ambient-drift { to { transform: translate3d(3%, -2%, 0) rotate(5deg); } }
+@keyframes backdrop-ken-burns { from { transform: scale(1.02) translate3d(0, 0, 0); } to { transform: scale(1.1) translate3d(-1.2%, -.8%, 0); } }
 @keyframes globe-aura { 50% { opacity: .64; transform: scale(1.035); } }
 @keyframes stage-in { from { opacity: 0; transform: scale(.985); } }
 @keyframes panel-in { from { opacity: 0; transform: translateX(14px); } }
