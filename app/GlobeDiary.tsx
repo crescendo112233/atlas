@@ -530,6 +530,7 @@ export function GlobeDiary() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [formOpen, setFormOpen] = useState(false);
   const [panelOpen, setPanelOpen] = useState(true);
+  const [globeExpanded, setGlobeExpanded] = useState(false);
   const [formMode, setFormMode] = useState<"place" | "photos">("place");
   const [cityName, setCityName] = useState("");
   const [visitedAt, setVisitedAt] = useState("");
@@ -613,13 +614,12 @@ export function GlobeDiary() {
         <div className="brand-lockup"><img className="brand-logo" src="/tppp-logo.png" alt="TppP logo" /><span className="brand-divider" /><p className="brand-wordmark">TOOP &amp; PP&apos;S ATLAS</p></div>
         <button className="add-button" type="button" onClick={openPlaceForm}>ADD PLACE / PHOTOS</button>
       </header>
-      <section className={panelOpen ? "workspace" : "workspace panel-collapsed"}>
+      <section className={`workspace${panelOpen ? "" : " panel-collapsed"}${globeExpanded ? " globe-expanded" : " globe-compact"}`}>
         <div className="globe-stage">
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
           <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-          <button className="panel-toggle" type="button" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen}>
-            <span>{panelOpen ? "HIDE SIDEBAR" : "SHOW PLACES & PHOTOS"}</span><i>{panelOpen ? "›" : "‹"}</i>
-          </button>
+          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => setGlobeExpanded(true)} aria-label="Expand globe"><span>EXPAND GLOBE</span></button>}
+          {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => setGlobeExpanded(false)}><i>−</i><span>ZOOM OUT</span></button>}
         </div>
         <aside className="places-panel">
           <div className="panel-heading"><span>RECORDED PLACES</span><strong>{footprints.length}</strong></div>
@@ -644,6 +644,9 @@ export function GlobeDiary() {
             <PhotoStack key={selected.id} footprint={selected} deletingPhotoId={deletingPhotoId} onDelete={removePhoto} />
           </div>}
         </aside>
+        <button className="panel-toggle" type="button" onClick={() => setPanelOpen((open) => !open)} aria-expanded={panelOpen} aria-label={panelOpen ? "Hide sidebar" : "Show sidebar"} title={panelOpen ? "Hide sidebar" : "Show sidebar"}>
+          <i>{panelOpen ? "›" : "‹"}</i>
+        </button>
       </section>
       <footer>World map: Natural Earth · City boundaries: © OpenStreetMap contributors</footer>
       {formOpen && <div className="modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setFormOpen(false); }}>

@@ -51,6 +51,10 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /powerPreference: "high-performance"/);
   assert.match(component, /1000 \/ 30/);
   assert.match(component, /visibilitychange/);
+  assert.match(component, /globeExpanded/);
+  assert.match(component, /EXPAND GLOBE/);
+  assert.match(component, /ZOOM OUT/);
+  assert.match(component, /aria-label=\{panelOpen \? "Hide sidebar"/);
   assert.match(component, /opacity: 0\.48/);
   assert.match(component, /City name/);
   assert.doesNotMatch(component, /Country or region|Latitude<input|Longitude<input/);
