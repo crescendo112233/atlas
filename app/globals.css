@@ -211,6 +211,7 @@ footer { height: 32px; padding: 0 36px; position: relative; z-index: 3; display:
 
 @media (max-width: 840px) {
   .site-shell { overflow: visible; }
+  .site-shell::before { animation: none; opacity: .56; }
   .topbar { height: 70px; padding: 0 18px; }
   .topbar h1 { font-size: 18px; }
   .add-button { padding: 9px 12px; font-size: 12px; }
@@ -219,6 +220,9 @@ footer { height: 32px; padding: 0 36px; position: relative; z-index: 3; display:
   .workspace { height: auto; min-height: 0; display: block; }
   .workspace { padding: 8px; }
   .globe-stage { height: 62vh; min-height: 460px; margin-bottom: 8px; border-radius: 18px; }
+  .globe-stage::before { animation: none; filter: blur(18px); }
+  .globe-backdrop-shade { backdrop-filter: none; }
+  .panel-toggle { backdrop-filter: blur(7px); }
   .places-panel { min-height: 540px; border-radius: 18px; }
   .panel-collapsed .places-panel { display: none; }
   .panel-toggle span { display: none; }

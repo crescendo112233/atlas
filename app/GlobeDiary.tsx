@@ -59,6 +59,25 @@ function mapLine(ring: number[][], radius: number, material: LineMaterial) {
   return line;
 }
 
+function mapBoundarySegments(features: BoundaryFeature[], radius: number, material: THREE.LineBasicMaterial) {
+  const positions: number[] = [];
+  for (const feature of features) {
+    for (const ring of boundaryRings(feature)) {
+      for (let index = 1; index < ring.length; index += 1) {
+        const [previousLongitude, previousLatitude] = ring[index - 1];
+        const [longitude, latitude] = ring[index];
+        const previous = globePoint(previousLatitude, previousLongitude, radius);
+        const current = globePoint(latitude, longitude, radius);
+        positions.push(previous.x, previous.y, previous.z, current.x, current.y, current.z);
+      }
+    }
+  }
+  if (!positions.length) return null;
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute("position", new THREE.Float32BufferAttribute(positions, 3));
+  return new THREE.LineSegments(geometry, material);
+}
+
 function mapFill(polygon: number[][][], radius: number, material: THREE.MeshBasicMaterial) {
   const contour = polygon[0]?.map(([longitude, latitude]) => new THREE.Vector2(longitude, latitude)) ?? [];
   const holes = polygon.slice(1).map((ring) => ring.map(([longitude, latitude]) => new THREE.Vector2(longitude, latitude)));
@@ -110,8 +129,14 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(38, 1, 0.025, 100);
     camera.position.set(0, 0.08, 3.9);
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    const lowPowerDevice = window.matchMedia("(max-width: 840px)").matches
+      || (navigator.hardwareConcurrency ?? 8) <= 4;
+    const renderer = new THREE.WebGLRenderer({
+      antialias: !lowPowerDevice,
+      alpha: true,
+      powerPreference: "high-performance",
+    });
+    renderer.setPixelRatio(lowPowerDevice ? 1 : Math.min(window.devicePixelRatio, 1.5));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     mount.appendChild(renderer.domElement);
 
@@ -128,7 +153,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       opacity: 0.48,
     });
     const earth = new THREE.Mesh(
-      new THREE.SphereGeometry(1, 128, 96),
+      new THREE.SphereGeometry(1, lowPowerDevice ? 72 : 96, lowPowerDevice ? 48 : 64),
       earthMaterial,
     );
     globe.add(earth);
@@ -138,7 +163,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     sunlight.position.set(-3, 3, 4);
     scene.add(sunlight);
     globe.add(new THREE.Mesh(
-      new THREE.SphereGeometry(1.025, 96, 72),
+      new THREE.SphereGeometry(1.025, lowPowerDevice ? 48 : 72, lowPowerDevice ? 32 : 52),
       new THREE.MeshBasicMaterial({ color: 0xa78bfa, transparent: true, opacity: 0.085, side: THREE.BackSide }),
     ));
 
@@ -253,14 +278,12 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     renderer.domElement.addEventListener("pointerup", pick);
 
     const lineMaterials: LineMaterial[] = [];
-    const countryMaterial = new LineMaterial({
+    const countryMaterial = new THREE.LineBasicMaterial({
       color: 0xb7a5d8,
       transparent: true,
-      opacity: 0.36,
+      opacity: 0.34,
       depthWrite: false,
-      linewidth: 0.78,
     });
-    lineMaterials.push(countryMaterial);
     const boundaryVisuals: Array<{ city: string; core: LineMaterial; fill: THREE.MeshBasicMaterial }> = [];
     let frame = 0;
     const resize = () => {
@@ -295,12 +318,8 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       .then((response) => response.json())
       .then((collection: { features: BoundaryFeature[] }) => {
         if (disposed) return;
-        for (const feature of collection.features) {
-          for (const ring of boundaryRings(feature)) {
-            const line = mapLine(ring, 1.006, countryMaterial);
-            if (line) { line.renderOrder = 1; globe.add(line); }
-          }
-        }
+        const borders = mapBoundarySegments(collection.features, 1.006, countryMaterial);
+        if (borders) { borders.renderOrder = 1; globe.add(borders); }
       })
       .catch(console.error);
 
@@ -351,8 +370,18 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const markerWorldPosition = new THREE.Vector3();
     const globeWorldQuaternion = new THREE.Quaternion();
     const billboardQuaternion = new THREE.Quaternion();
-    const animate = () => {
+    const frameInterval = lowPowerDevice ? 1000 / 30 : 1000 / 50;
+    let lastFrameAt = 0;
+    let pageVisible = !document.hidden;
+    const onVisibilityChange = () => {
+      pageVisible = !document.hidden;
+      if (pageVisible) lastFrameAt = 0;
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    const animate = (now = performance.now()) => {
       frame = requestAnimationFrame(animate);
+      if (!pageVisible || now - lastFrameAt < frameInterval) return;
+      lastFrameAt = now;
       if (selectedIdRef.current !== lastFocusedId) {
         lastFocusedId = selectedIdRef.current;
         const footprint = footprints.find((item) => item.id === selectedIdRef.current);
@@ -414,6 +443,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     return () => {
       disposed = true;
       cancelAnimationFrame(frame);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       observer.disconnect();
       renderer.domElement.removeEventListener("pointermove", hoverPin);
       renderer.domElement.removeEventListener("pointerleave", clearHover);

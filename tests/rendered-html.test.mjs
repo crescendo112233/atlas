@@ -45,6 +45,12 @@ test("ships the cartographic globe, automatic city boundary, and photo-storage c
   assert.match(component, /pointermove/);
   assert.match(component, /zoomToCursor = false/);
   assert.match(component, /controls\.rotateSpeed = THREE\.MathUtils\.lerp/);
+  assert.match(component, /mapBoundarySegments/);
+  assert.match(component, /new THREE\.LineSegments/);
+  assert.match(component, /hardwareConcurrency/);
+  assert.match(component, /powerPreference: "high-performance"/);
+  assert.match(component, /1000 \/ 30/);
+  assert.match(component, /visibilitychange/);
   assert.match(component, /opacity: 0\.48/);
   assert.match(component, /City name/);
   assert.doesNotMatch(component, /Country or region|Latitude<input|Longitude<input/);
