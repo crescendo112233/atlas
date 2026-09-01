@@ -29,3 +29,24 @@ const client = new OSS({
 
 const result = await client.list({ "max-keys": 1 });
 console.log(`OSS access OK (${result.objects?.length ?? 0} object returned)`);
+
+const objectKey = `healthchecks/atlas-${Date.now()}.txt`;
+const expected = "TOOP & PP'S ATLAS OSS health check";
+let uploaded = false;
+
+try {
+  await client.put(objectKey, Buffer.from(expected, "utf8"));
+  uploaded = true;
+  console.log("OSS upload OK");
+
+  const downloaded = await client.get(objectKey);
+  if (downloaded.content.toString("utf8") !== expected) {
+    throw new Error("Downloaded OSS health-check content did not match");
+  }
+  console.log("OSS download OK");
+} finally {
+  if (uploaded) {
+    await client.delete(objectKey);
+    console.log("OSS delete OK");
+  }
+}
