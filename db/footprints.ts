@@ -2,6 +2,10 @@ import OSS from "ali-oss";
 import Credential, { Config } from "@alicloud/credentials";
 import { getSql } from "./index";
 
+const CredentialClient = (
+  (Credential as unknown as { default?: typeof Credential }).default ?? Credential
+);
+
 export type PhotoRow = {
   id: number;
   footprintId: number;
@@ -38,7 +42,7 @@ const SEED_PLACES = [
 ] as const;
 
 const ecsCredential = process.env.ALIBABA_CLOUD_ECS_ROLE_NAME
-  ? new Credential(new Config({
+  ? new CredentialClient(new Config({
       type: "ecs_ram_role",
       roleName: process.env.ALIBABA_CLOUD_ECS_ROLE_NAME,
       disableIMDSv1: true,
