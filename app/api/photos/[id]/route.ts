@@ -8,11 +8,11 @@ export async function GET(request: Request) {
   await ensureFootprintsTable();
   const result = await getPhoto(id);
   if (!result) return new Response("Not found", { status: 404 });
-  return new Response(result.object.body, {
+  return new Response(new Uint8Array(result.body), {
     headers: {
       "Content-Type": result.photo.contentType,
       "Cache-Control": "private, max-age=3600",
-      ETag: result.object.httpEtag,
+      ETag: result.etag,
     },
   });
 }

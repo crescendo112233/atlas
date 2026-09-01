@@ -1,7 +1,8 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
+  output: "standalone",
+  serverExternalPackages: ["ali-oss", "@alicloud/credentials", "postgres"],
 };
 
 export default nextConfig;

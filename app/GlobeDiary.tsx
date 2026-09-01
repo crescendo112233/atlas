@@ -470,6 +470,8 @@ function PhotoStack({ footprint, deletingPhotoId, onDelete }: {
 }) {
   const [active, setActive] = useState(footprint.photos[0] ?? null);
   useEffect(() => {
+    // The selected photo must follow the active city when its collection changes.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActive((current) => footprint.photos.find((photo) => photo.id === current?.id) ?? footprint.photos[0] ?? null);
   }, [footprint.photos]);
   if (!footprint.photos.length) return <div className="photo-empty">No photos here yet</div>;
@@ -482,7 +484,7 @@ function PhotoStack({ footprint, deletingPhotoId, onDelete }: {
           <div className="photo-card-wrap" key={photo.id} style={{ "--photo-index": index } as React.CSSProperties}>
             <button className={active?.id === photo.id ? "photo-card active" : "photo-card"}
               onMouseEnter={() => setActive(photo)} onFocus={() => setActive(photo)} onClick={() => setActive(photo)} type="button">
-              <img src={photo.url} alt={`${cityLabel} photo ${index + 1}`} />
+              <img src={photo.url} alt={`${cityLabel} memory ${index + 1}`} />
             </button>
             <button className="delete-photo-button" type="button" disabled={deletingPhotoId === photo.id}
               onClick={() => onDelete(photo)} aria-label={`Delete ${cityLabel} photo ${index + 1}`}>
@@ -502,6 +504,8 @@ function GlobeBackdrop({ footprint }: { footprint: Footprint | null }) {
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
+    // Restart the slideshow from the first image after choosing another city.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setActiveIndex(0);
     if (photos.length < 2) return;
     const timer = window.setInterval(() => {

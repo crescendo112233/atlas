@@ -35,6 +35,7 @@ function errorResponse(error: unknown) {
 }
 
 async function resolveCity(city: string) {
+  const appOrigin = process.env.APP_ORIGIN ?? "http://localhost:3000";
   const url = new URL(CITY_SEARCH_ENDPOINT);
   url.searchParams.set("q", city);
   url.searchParams.set("format", "jsonv2");
@@ -47,8 +48,8 @@ async function resolveCity(city: string) {
     response = await fetch(url, {
       headers: {
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://our-planet-diary-sz-sg.quzheping112233.chatgpt.site/",
-        "User-Agent": "OurPlanetDiary/1.0 (+https://our-planet-diary-sz-sg.quzheping112233.chatgpt.site)",
+        "Referer": `${appOrigin}/`,
+        "User-Agent": `OurPlanetDiary/1.0 (+${appOrigin})`,
       },
     });
   } catch {

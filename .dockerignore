@@ -1,0 +1,13 @@
+.git
+.next
+dist
+node_modules
+.env
+.env.*
+!.env.example
+.wrangler
+outputs
+work
+*.pem
+npm-debug.log*
+pnpm-debug.log*
