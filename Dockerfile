@@ -35,4 +35,4 @@ COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=builder --chown=nextjs:nodejs /app/deploy/postgres-init.sql ./deploy/postgres-init.sql
 USER nextjs
 EXPOSE 3000
-CMD ["sh", "-c", "node scripts/migrate.mjs && node server.js"]
+CMD ["node", "server.js"]
