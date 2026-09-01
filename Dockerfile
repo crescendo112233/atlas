@@ -7,7 +7,8 @@ RUN corepack enable
 FROM base AS dependencies
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm config set registry https://registry.npmmirror.com \
+RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
+    pnpm config set registry https://registry.npmmirror.com \
     && pnpm config set fetch-timeout 600000 \
     && pnpm install --frozen-lockfile
 
