@@ -45,11 +45,5 @@
     "typescript": "5.9.3",
     "typescript-eslint": "8.59.3"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "sharp"
-    ]
-  },
   "type": "module"
 }
