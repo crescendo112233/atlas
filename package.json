@@ -14,7 +14,8 @@
     "lint": "eslint app db scripts tests next.config.ts drizzle.config.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "node scripts/migrate.mjs",
-    "db:check": "node scripts/check-db.mjs"
+    "db:check": "node scripts/check-db.mjs",
+    "oss:check": "node scripts/check-oss.mjs"
   },
   "dependencies": {
     "@alicloud/credentials": "^2.4.4",
