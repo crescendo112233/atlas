@@ -109,14 +109,16 @@ function pinGeometry() {
   return geometry;
 }
 
-function GlobeCanvas({ footprints, selectedId, onSelect }: {
-  footprints: Footprint[]; selectedId: number | null; onSelect: (id: number) => void;
+function GlobeCanvas({ footprints, selectedId, expanded, onSelect }: {
+  footprints: Footprint[]; selectedId: number | null; expanded: boolean; onSelect: (id: number) => void;
 }) {
   const mountRef = useRef<HTMLDivElement>(null);
   const onSelectRef = useRef(onSelect);
   const selectedIdRef = useRef(selectedId);
+  const expandedRef = useRef(expanded);
   const selectedCityRef = useRef(footprints.find((item) => item.id === selectedId)?.city ?? footprints[0]?.city ?? "");
   useEffect(() => { onSelectRef.current = onSelect; }, [onSelect]);
+  useEffect(() => { expandedRef.current = expanded; }, [expanded]);
   useEffect(() => {
     selectedIdRef.current = selectedId;
     selectedCityRef.current = footprints.find((item) => item.id === selectedId)?.city ?? footprints[0]?.city ?? "";
@@ -136,7 +138,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       alpha: true,
       powerPreference: "high-performance",
     });
-    renderer.setPixelRatio(lowPowerDevice ? 1 : Math.min(window.devicePixelRatio, 1.5));
+    renderer.setPixelRatio(lowPowerDevice ? 1 : Math.min(window.devicePixelRatio, 1.25));
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     mount.appendChild(renderer.domElement);
 
@@ -153,7 +155,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       opacity: 0.48,
     });
     const earth = new THREE.Mesh(
-      new THREE.SphereGeometry(1, lowPowerDevice ? 72 : 96, lowPowerDevice ? 48 : 64),
+      new THREE.SphereGeometry(1, lowPowerDevice ? 56 : 72, lowPowerDevice ? 36 : 48),
       earthMaterial,
     );
     globe.add(earth);
@@ -236,6 +238,7 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     controls.zoomSpeed = 0.9;
     controls.zoomToCursor = false;
     controls.rotateSpeed = 0.36;
+    controls.enableZoom = expandedRef.current;
     controls.autoRotate = true;
     controls.autoRotateSpeed = 0.26;
     let focusDirection: THREE.Vector3 | null = null;
@@ -248,32 +251,51 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const pointer = new THREE.Vector2();
     let hoveredMarkerId: number | null = null;
     let hoveredCity = "";
-    const updatePointer = (event: PointerEvent) => {
+    const updatePointer = (clientX: number, clientY: number) => {
       const rect = renderer.domElement.getBoundingClientRect();
-      pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-      pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
+      pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
       raycaster.setFromCamera(pointer, camera);
       const hit = raycaster.intersectObjects([earth, ...markers], true)[0];
       return hit?.object === earth ? null : hit?.object.parent;
     };
+    let hoverFrame = 0;
+    let pendingPointer = { x: 0, y: 0 };
     const hoverPin = (event: PointerEvent) => {
-      const marker = updatePointer(event);
-      hoveredMarkerId = marker?.userData.footprintId ?? null;
-      hoveredCity = marker?.userData.city ?? "";
-      if (hoveredMarkerId) controls.autoRotate = false;
-      renderer.domElement.style.cursor = hoveredMarkerId ? "pointer" : "grab";
+      pendingPointer = { x: event.clientX, y: event.clientY };
+      if (hoverFrame) return;
+      hoverFrame = requestAnimationFrame(() => {
+        hoverFrame = 0;
+        const marker = updatePointer(pendingPointer.x, pendingPointer.y);
+        hoveredMarkerId = marker?.userData.footprintId ?? null;
+        hoveredCity = marker?.userData.city ?? "";
+        if (hoveredMarkerId) controls.autoRotate = false;
+        renderer.domElement.style.cursor = hoveredMarkerId ? "pointer" : "grab";
+      });
     };
     const clearHover = () => {
       hoveredMarkerId = null;
       hoveredCity = "";
       renderer.domElement.style.cursor = "grab";
     };
+    let pointerDown = { x: 0, y: 0 };
+    let pointerDragged = false;
+    const rememberPointerDown = (event: PointerEvent) => {
+      pointerDown = { x: event.clientX, y: event.clientY };
+      pointerDragged = false;
+    };
+    const rememberDrag = (event: PointerEvent) => {
+      if (Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y) > 5) pointerDragged = true;
+    };
     const pick = (event: PointerEvent) => {
-      const marker = updatePointer(event);
+      if (pointerDragged) return;
+      const marker = updatePointer(event.clientX, event.clientY);
       const footprintId = marker?.userData.footprintId;
       if (footprintId) onSelectRef.current(footprintId as number);
     };
+    renderer.domElement.addEventListener("pointerdown", rememberPointerDown);
     renderer.domElement.addEventListener("pointermove", hoverPin);
+    renderer.domElement.addEventListener("pointermove", rememberDrag);
     renderer.domElement.addEventListener("pointerleave", clearHover);
     renderer.domElement.addEventListener("pointerup", pick);
 
@@ -286,14 +308,23 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     });
     const boundaryVisuals: Array<{ city: string; core: LineMaterial; fill: THREE.MeshBasicMaterial }> = [];
     let frame = 0;
+    let resizePending = false;
+    let renderedWidth = 0;
+    let renderedHeight = 0;
     const resize = () => {
       const { clientWidth, clientHeight } = mount;
+      if (Math.abs(clientWidth - renderedWidth) < 2 && Math.abs(clientHeight - renderedHeight) < 2) return;
+      renderedWidth = clientWidth;
+      renderedHeight = clientHeight;
       camera.aspect = clientWidth / Math.max(clientHeight, 1);
       camera.updateProjectionMatrix();
       renderer.setSize(clientWidth, clientHeight, false);
       for (const material of lineMaterials) material.resolution.set(clientWidth, clientHeight);
     };
-    const observer = new ResizeObserver(resize);
+    const scheduleResize = () => {
+      resizePending = true;
+    };
+    const observer = new ResizeObserver(scheduleResize);
     observer.observe(mount);
     resize();
 
@@ -370,8 +401,10 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     const markerWorldPosition = new THREE.Vector3();
     const globeWorldQuaternion = new THREE.Quaternion();
     const billboardQuaternion = new THREE.Quaternion();
-    const frameInterval = lowPowerDevice ? 1000 / 30 : 1000 / 50;
+    const frameInterval = lowPowerDevice ? 1000 / 30 : 1000 / 40;
     let lastFrameAt = 0;
+    let lastExpanded = expandedRef.current;
+    let resetCameraDistance = !expandedRef.current;
     let pageVisible = !document.hidden;
     const onVisibilityChange = () => {
       pageVisible = !document.hidden;
@@ -382,6 +415,29 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
       frame = requestAnimationFrame(animate);
       if (!pageVisible || now - lastFrameAt < frameInterval) return;
       lastFrameAt = now;
+      if (resizePending) {
+        resizePending = false;
+        resize();
+      }
+      if (expandedRef.current !== lastExpanded) {
+        lastExpanded = expandedRef.current;
+        controls.enableZoom = lastExpanded;
+        if (!lastExpanded) {
+          resetCameraDistance = true;
+          focusDirection = null;
+        }
+      }
+      if (resetCameraDistance) {
+        const distance = camera.position.length();
+        const nextDistance = THREE.MathUtils.lerp(distance, 3.9, 0.16);
+        camera.position.setLength(nextDistance);
+        focusDistance = nextDistance;
+        if (Math.abs(nextDistance - 3.9) < 0.004) {
+          camera.position.setLength(3.9);
+          focusDistance = 3.9;
+          resetCameraDistance = false;
+        }
+      }
       if (selectedIdRef.current !== lastFocusedId) {
         lastFocusedId = selectedIdRef.current;
         const footprint = footprints.find((item) => item.id === selectedIdRef.current);
@@ -443,9 +499,12 @@ function GlobeCanvas({ footprints, selectedId, onSelect }: {
     return () => {
       disposed = true;
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(hoverFrame);
       document.removeEventListener("visibilitychange", onVisibilityChange);
       observer.disconnect();
+      renderer.domElement.removeEventListener("pointerdown", rememberPointerDown);
       renderer.domElement.removeEventListener("pointermove", hoverPin);
+      renderer.domElement.removeEventListener("pointermove", rememberDrag);
       renderer.domElement.removeEventListener("pointerleave", clearHover);
       renderer.domElement.removeEventListener("pointerup", pick);
       controls.removeEventListener("start", stopFocus);
@@ -501,24 +560,24 @@ function GlobeBackdrop({ footprint }: { footprint: Footprint | null }) {
   const photos = footprint?.photos.length
     ? footprint.photos.map((photo) => ({ key: String(photo.id), url: photo.url, isFallback: false }))
     : [{ key: "fallback", url: "/atlas-fallback.jpg", isFallback: true }];
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [slides, setSlides] = useState<{ active: number; previous: number | null }>({ active: 0, previous: null });
 
   useEffect(() => {
     // Restart the slideshow from the first image after choosing another city.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setActiveIndex(0);
+    setSlides({ active: 0, previous: null });
     if (photos.length < 2) return;
     const timer = window.setInterval(() => {
-      setActiveIndex((current) => (current + 1) % photos.length);
+      setSlides((current) => ({ previous: current.active, active: (current.active + 1) % photos.length }));
     }, 5600);
     return () => window.clearInterval(timer);
   }, [footprint?.id, photos.length]);
 
   return (
     <div className="globe-backdrop" aria-hidden="true">
-      {photos.map((photo, index) => (
+      {photos.map((photo, index) => ({ photo, index })).filter(({ index }) => index === slides.active || index === slides.previous).map(({ photo, index }) => (
         <img
-          className={`${index === activeIndex ? "active" : ""}${photo.isFallback ? " fallback" : ""}`}
+          className={`${index === slides.active ? "active" : ""}${photo.isFallback ? " fallback" : ""}`}
           key={`${footprint?.id ?? "fallback"}-${photo.key}`}
           src={photo.url}
           alt=""
@@ -581,7 +640,7 @@ export function GlobeDiary() {
     globeTransitionTimer.current = window.setTimeout(() => {
       setGlobeTransitioning(false);
       globeTransitionTimer.current = null;
-    }, 880);
+    }, 940);
   };
 
   const submit = async (event: FormEvent) => {
@@ -638,9 +697,8 @@ export function GlobeDiary() {
           <GlobeBackdrop key={selected?.id ?? "fallback"} footprint={selected} />
         </div>
         <div className="globe-stage">
-          <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} onSelect={setSelectedId} />
-          {!globeExpanded && <button className="globe-expand-hit" type="button" onClick={() => resizeGlobe(true)} aria-label="Expand globe"><span><i>+</i><b>ZOOM</b></span></button>}
-          {globeExpanded && <button className="globe-zoom-button" type="button" onClick={() => resizeGlobe(false)} aria-label="Shrink globe"><i>−</i><span>ZOOM</span></button>}
+          <GlobeCanvas footprints={footprints} selectedId={selected?.id ?? null} expanded={globeExpanded} onSelect={setSelectedId} />
+          <button className="globe-zoom-button" data-expanded={globeExpanded} type="button" onClick={() => resizeGlobe(!globeExpanded)} aria-label={globeExpanded ? "Shrink globe" : "Expand globe"}><i>{globeExpanded ? "−" : "+"}</i><span>ZOOM</span></button>
         </div>
         <aside className="places-panel">
           <div className="panel-heading"><span>RECORDED PLACES</span><strong>{footprints.length}</strong></div>

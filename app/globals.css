@@ -82,10 +82,9 @@ button { color: inherit; }
 .workspace { height: calc(100vh - 116px); min-height: 650px; padding: 12px; gap: 12px; position: relative; z-index: 1; display: grid; grid-template-columns: minmax(0, 1fr) 370px; transition: grid-template-columns .48s cubic-bezier(.2, .8, .2, 1), gap .48s ease; }
 .workspace.panel-collapsed { grid-template-columns: minmax(0, 1fr) 0; gap: 0; }
 .atlas-backdrop-frame { min-width: 0; grid-column: 1; grid-row: 1; position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: linear-gradient(35deg, rgba(13, 79, 151, .14), rgba(39, 22, 80, .15) 56%, rgba(112, 44, 161, .16)); box-shadow: inset 0 1px rgba(255, 255, 255, .035), 0 18px 45px rgba(7, 3, 15, .16); }
-.globe-stage { width: 100%; height: 100%; min-width: 0; grid-column: 1; grid-row: 1; z-index: 2; justify-self: start; align-self: start; position: relative; overflow: hidden; border: 0; border-radius: 22px; background: transparent; box-shadow: none; transform-origin: left top; transition: width .86s cubic-bezier(.22, 1, .36, 1), height .86s cubic-bezier(.22, 1, .36, 1), border-radius .6s ease; }
+.globe-stage { width: 100%; height: 100%; min-width: 0; grid-column: 1; grid-row: 1; z-index: 2; justify-self: start; align-self: start; position: relative; overflow: hidden; border: 0; border-radius: 22px; background: transparent; box-shadow: none; transform-origin: left top; transition: width .9s cubic-bezier(.4, 0, .2, 1), height .9s cubic-bezier(.4, 0, .2, 1), border-radius .6s ease; }
 .globe-compact .globe-stage { width: min(36vw, 430px); height: min(35vh, 300px); min-width: 300px; min-height: 220px; border-radius: 18px; box-shadow: none; }
-.globe-is-transitioning .globe-stage { pointer-events: none; will-change: width, height; }
-.globe-is-transitioning .globe-canvas { animation: globe-resize-transition .88s cubic-bezier(.22, 1, .36, 1) both; }
+.globe-is-transitioning .globe-stage { will-change: width, height; }
 .globe-backdrop { position: absolute; inset: 0; overflow: hidden; background: #0d0816; }
 .globe-backdrop > img { position: absolute; inset: -3%; width: 106%; height: 106%; object-fit: cover; opacity: 0; transform: scale(1.02); filter: brightness(1.1) saturate(1.04) contrast(1.02); transition: opacity 1.55s ease; }
 .globe-backdrop > img.fallback { object-position: center 48%; filter: brightness(1.2) saturate(1.08) contrast(.98); }
@@ -112,13 +111,8 @@ button { color: inherit; }
 .globe-canvas { position: absolute; inset: 0; z-index: 1; animation: stage-in .8s cubic-bezier(.2, .8, .2, 1) both; }
 .globe-canvas canvas { display: block; width: 100%; height: 100%; cursor: grab; }
 .globe-canvas canvas:active { cursor: grabbing; }
-.globe-expand-hit { position: absolute; inset: 0; z-index: 5; display: grid; place-items: start; padding: 17px; border: 0; background: transparent; color: rgba(229, 222, 255, .78); cursor: zoom-in; }
-.globe-expand-hit span { height: 34px; padding: 0 11px 0 7px; display: flex; align-items: center; gap: 7px; border: 1px solid rgba(218, 207, 255, .24); border-radius: 10px; background: rgba(21, 12, 38, .48); backdrop-filter: blur(8px); transition: transform .22s ease, background .22s ease, color .22s ease; }
-.globe-expand-hit i, .globe-expand-hit b { font-style: normal; font-weight: 400; }
-.globe-expand-hit i { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 7px; background: rgba(167, 139, 250, .13); font-size: 15px; }
-.globe-expand-hit b { font-size: 9px; letter-spacing: .12em; }
-.globe-expand-hit:hover span { transform: translateY(-2px); background: rgba(42, 25, 69, .68); color: #f3efff; }
-.globe-zoom-button { position: absolute; z-index: 5; top: 17px; left: 17px; height: 34px; padding: 0 11px 0 7px; display: flex; align-items: center; gap: 7px; border: 1px solid rgba(210, 193, 247, .22); border-radius: 10px; background: rgba(23, 13, 39, .48); color: rgba(231, 223, 255, .82); backdrop-filter: blur(8px); cursor: zoom-out; transition: transform .2s ease, background .2s ease, border-color .2s ease; }
+.globe-zoom-button { position: absolute; z-index: 5; top: 17px; left: 17px; height: 34px; padding: 0 11px 0 7px; display: flex; align-items: center; gap: 7px; border: 1px solid rgba(210, 193, 247, .22); border-radius: 10px; background: rgba(23, 13, 39, .48); color: rgba(231, 223, 255, .82); backdrop-filter: blur(8px); cursor: zoom-in; transition: transform .2s ease, background .2s ease, border-color .2s ease; }
+.globe-zoom-button[data-expanded="true"] { cursor: zoom-out; }
 .globe-zoom-button:hover { transform: translateY(-1px); background: rgba(46, 27, 74, .7); border-color: rgba(218, 201, 251, .4); }
 .globe-zoom-button:active { transform: scale(.96); }
 .globe-zoom-button i { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 7px; background: rgba(167, 139, 250, .13); font-style: normal; font-size: 16px; }
@@ -220,7 +214,6 @@ footer { height: 32px; padding: 0 36px; position: relative; z-index: 3; display:
 @keyframes backdrop-ken-burns { from { transform: scale(1.02) translate3d(0, 0, 0); } to { transform: scale(1.1) translate3d(-1.2%, -.8%, 0); } }
 @keyframes globe-aura { 50% { opacity: .64; transform: scale(1.035); } }
 @keyframes stage-in { from { opacity: 0; transform: scale(.985); } }
-@keyframes globe-resize-transition { 0% { opacity: 1; filter: blur(0); } 42% { opacity: .76; filter: blur(.7px); } 100% { opacity: 1; filter: blur(0); } }
 @keyframes panel-in { from { opacity: 0; transform: translateX(14px); } }
 @keyframes content-in { from { opacity: 0; transform: translateY(5px); } }
 @keyframes status-pulse { 50% { transform: scale(1.18); box-shadow: 0 0 0 6px rgba(167, 139, 250, .05), 0 0 18px rgba(167, 139, 250, .4); } }
@@ -247,7 +240,7 @@ footer { height: 32px; padding: 0 36px; position: relative; z-index: 3; display:
   .panel-toggle span { display: none; }
   .places-panel { min-height: 540px; grid-column: 1; grid-row: 2; border-radius: 18px; }
   .panel-collapsed .places-panel { display: none; }
-  .globe-zoom-button span, .globe-expand-hit b { display: none; }
+  .globe-zoom-button span { display: none; }
   .places-list { max-height: 230px; }
   footer { height: auto; min-height: 38px; padding: 10px 18px; }
 }
